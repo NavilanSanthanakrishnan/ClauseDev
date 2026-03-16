@@ -27,6 +27,8 @@ class UploadedBillProfile(BaseModel):
     enforcement_mechanisms: List[str] = Field(default_factory=list)
     named_agencies: List[str] = Field(default_factory=list)
     explicit_citations: List[str] = Field(default_factory=list)
+    amended_citations: List[str] = Field(default_factory=list)
+    repealed_citations: List[str] = Field(default_factory=list)
     conflict_search_phrases: List[str] = Field(default_factory=list)
     key_clauses: List[BillClause] = Field(default_factory=list)
 
@@ -99,6 +101,7 @@ class ConflictSearchResult(BaseModel):
     profile: UploadedBillProfile
     conflicts: List[ConflictFinding]
     candidate_counts: dict[str, int]
+    retrieved_candidates: dict[str, List[LegalCandidate]] = Field(default_factory=dict)
     timings: dict[str, float]
     warnings: List[str] = Field(default_factory=list)
 

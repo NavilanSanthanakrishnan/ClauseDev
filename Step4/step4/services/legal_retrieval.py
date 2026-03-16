@@ -117,7 +117,11 @@ def _best_excerpt(raw_text: str, search_terms: list[str], char_limit: int) -> st
 @lru_cache(maxsize=1)
 def _load_model() -> SentenceTransformer:
     settings = get_settings()
-    return SentenceTransformer(settings.embedding_model, device=settings.embedding_device)
+    return SentenceTransformer(
+        settings.embedding_model,
+        device=settings.embedding_device,
+        local_files_only=True,
+    )
 
 
 class LegalRetriever:
@@ -197,7 +201,16 @@ class LegalRetriever:
         return list(OrderedDict.fromkeys(ranked))[:14]
 
     def _citation_sources(self, profile: UploadedBillProfile) -> list[str]:
-        return list(OrderedDict.fromkeys([*profile.explicit_citations, *profile.conflict_search_phrases]))
+        return list(
+            OrderedDict.fromkeys(
+                [
+                    *profile.explicit_citations,
+                    *profile.amended_citations,
+                    *profile.repealed_citations,
+                    *profile.conflict_search_phrases,
+                ]
+            )
+        )
 
     def _normalized_california_citations(self, profile: UploadedBillProfile) -> list[str]:
         matches: list[str] = []
@@ -252,7 +265,17 @@ class LegalRetriever:
             )
             self._merge_candidates(candidates, rows, query, "california", "section")
 
-        for citation in self._normalized_california_citations(profile):
+        prioritized_citations = list(
+            OrderedDict.fromkeys(
+                [
+                    *self._normalized_california_citations(
+                        profile.model_copy(update={"explicit_citations": profile.amended_citations})
+                    ),
+                    *self._normalized_california_citations(profile),
+                ]
+            )
+        )
+        for idx, citation in enumerate(prioritized_citations):
             rows = self.db.california.fetch_all(
                 """
                 SELECT
@@ -269,7 +292,7 @@ class LegalRetriever:
                 """,
                 {"citation": citation},
             )
-            self._merge_candidates(candidates, rows, citation, "california", "section", exact_boost=1.5)
+            self._merge_candidates(candidates, rows, citation, "california", "section", exact_boost=2.2 if idx == 0 else 1.7)
 
         return self._finalize_candidates(profile, list(candidates.values()))
 

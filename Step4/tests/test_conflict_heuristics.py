@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from step4.models import BillClause, LegalCandidate, UploadedBillProfile
-from step4.services.conflict_analysis import ConflictAnalysisService
+from step4.services.conflict_analysis import ConflictAnalysisService, ConflictFinding
 
 
 def test_overtime_heuristic_identifies_california_threshold_conflict() -> None:
@@ -52,3 +52,73 @@ def test_minimum_wage_heuristic_prefers_federal_savings_clause() -> None:
 
     assert findings
     assert findings[0].citation == "29 U.S.C. § 218"
+
+
+def test_amendment_conflict_identifies_operable_california_section() -> None:
+    service = ConflictAnalysisService.__new__(ConflictAnalysisService)
+    profile = UploadedBillProfile(
+        summary="A bill to amend Section 510 of the Labor Code to allow flexible work schedules without daily overtime.",
+        amended_citations=["LAB 510"],
+        key_clauses=[
+            BillClause(
+                label="flexible work schedule",
+                effect="permission",
+                text="An employer may implement a 10-hour workday within a 40-hour workweek without overtime compensation for those additional daily hours.",
+            )
+        ],
+    )
+    candidate = LegalCandidate(
+        document_id="lab-510",
+        source_system="california",
+        source_kind="section",
+        citation="LAB 510.",
+        excerpt="Eight hours of labor constitutes a day's work. Any work in excess of eight hours in one workday shall be compensated at one and one-half times the regular rate of pay.",
+    )
+
+    findings = service._amendment_conflict_findings(
+        source_system="california",
+        profile=profile,
+        candidates=[candidate],
+    )
+
+    assert findings
+    assert findings[0].citation == "LAB 510."
+    assert findings[0].conflict_type == "state contradiction"
+
+
+def test_postprocess_drops_federal_207_for_agricultural_overtime_bill() -> None:
+    service = ConflictAnalysisService.__new__(ConflictAnalysisService)
+    profile = UploadedBillProfile(
+        summary="Agricultural workers overtime compensation bill increasing the weekly threshold for an agricultural occupation.",
+        key_clauses=[BillClause(label="ag overtime", effect="permission", text="Agricultural workers would receive overtime only after 48 hours in a workweek.")],
+    )
+    findings = [
+        ConflictFinding(
+            candidate_id="california:lab-860",
+            source_system="california",
+            source_kind="section",
+            citation="LAB 860",
+            conflict_type="state contradiction",
+            severity="high",
+            confidence=0.94,
+            bill_excerpt="",
+            statute_excerpt="",
+            explanation="",
+        ),
+        ConflictFinding(
+            candidate_id="federal:29usc207",
+            source_system="federal",
+            source_kind="section",
+            citation="29 U.S.C. § 207",
+            conflict_type="compliance impossibility",
+            severity="high",
+            confidence=0.81,
+            bill_excerpt="",
+            statute_excerpt="",
+            explanation="",
+        ),
+    ]
+
+    filtered = service._postprocess_findings(profile=profile, findings=findings)
+
+    assert [finding.citation for finding in filtered] == ["LAB 860"]

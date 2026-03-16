@@ -125,6 +125,7 @@ class ConflictAnalysisService:
             profile=profile,
             conflicts=conflicts,
             candidate_counts={key: len(value) for key, value in candidates.items()},
+            retrieved_candidates={key: value for key, value in candidates.items()},
             timings={key: round(value, 3) for key, value in timings.items()},
             warnings=warnings,
         )
@@ -154,6 +155,8 @@ class ConflictAnalysisService:
             "enforcement_mechanisms": profile.enforcement_mechanisms,
             "named_agencies": profile.named_agencies,
             "explicit_citations": profile.explicit_citations,
+            "amended_citations": profile.amended_citations,
+            "repealed_citations": profile.repealed_citations,
             "key_clauses": [clause.model_dump() for clause in profile.key_clauses],
         }
         bill_excerpt = bill_text[:12000]
@@ -193,6 +196,14 @@ class ConflictAnalysisService:
             if heuristic_findings:
                 warnings.append(f"{source_system.title()} heuristic conflict rules contributed results.")
                 source_findings = self._merge_verified_findings(source_findings, heuristic_findings)
+            amendment_findings = self._amendment_conflict_findings(
+                source_system=source_system,
+                profile=profile,
+                candidates=source_candidates[:8],
+            )
+            if amendment_findings:
+                warnings.append(f"{source_system.title()} amendment-aware conflict rules contributed results.")
+                source_findings = self._merge_verified_findings(source_findings, amendment_findings)
             if source_system == "federal" and not source_findings:
                 source_findings = self._heuristic_federal_findings(profile=profile, candidates=source_candidates)
                 if source_findings:
@@ -203,6 +214,52 @@ class ConflictAnalysisService:
 
         findings = self._postprocess_findings(profile=profile, findings=findings)
         return sorted(findings, key=lambda item: item.confidence, reverse=True)
+
+    def _amendment_conflict_findings(
+        self,
+        *,
+        source_system: str,
+        profile: UploadedBillProfile,
+        candidates: list,
+    ) -> list[ConflictFinding]:
+        if source_system != "california":
+            return []
+
+        targeted_citations = {
+            citation.rstrip(".").upper() for citation in [*profile.amended_citations, *profile.repealed_citations] if citation
+        }
+        if not targeted_citations:
+            return []
+
+        findings: list[ConflictFinding] = []
+        bill_excerpt = (profile.key_clauses[0].text if profile.key_clauses else profile.summary).strip()
+        for candidate in candidates:
+            normalized_candidate = (candidate.citation or "").rstrip(".").upper()
+            if normalized_candidate not in targeted_citations:
+                continue
+
+            findings.append(
+                ConflictFinding(
+                    candidate_id=f"{source_system}:{candidate.document_id}",
+                    source_system=source_system,
+                    source_kind=candidate.source_kind,
+                    citation=candidate.citation,
+                    heading=candidate.heading,
+                    hierarchy_path=candidate.hierarchy_path,
+                    source_url=candidate.source_url,
+                    conflict_type="state contradiction",
+                    severity="high",
+                    confidence=0.94,
+                    bill_excerpt=bill_excerpt,
+                    statute_excerpt=candidate.excerpt,
+                    explanation=(
+                        "The bill expressly amends or repeals this currently operative California section, "
+                        "so the proposed rule would displace the statute's existing requirements if enacted."
+                    ),
+                    why_conflict="Direct amendment-aware match against an operative California statute cited by the bill.",
+                )
+            )
+        return findings
 
     def _judge_source_conflicts(
         self,
@@ -360,6 +417,7 @@ class ConflictAnalysisService:
         if not findings:
             return []
 
+        targeted_citations = {citation.rstrip(".").upper() for citation in [*profile.amended_citations, *profile.repealed_citations]}
         profile_text = " ".join(
             [profile.summary, *profile.permissions_created, *profile.required_actions, *(clause.text for clause in profile.key_clauses)]
         ).lower()
@@ -372,11 +430,17 @@ class ConflictAnalysisService:
                 "LAB 1197.1",
                 "LAB 1194",
                 "LAB 1194.2",
+                "LAB 1191",
+                "LAB 1191.5",
                 "LAB 226.2",
                 "29 U.S.C. § 218",
                 "29 U.S.C. § 206",
             )
-            preferred = [finding for finding in filtered if finding.citation.startswith(preferred_prefixes)]
+            preferred = [
+                finding
+                for finding in filtered
+                if finding.citation.startswith(preferred_prefixes) or finding.citation.rstrip(".").upper() in targeted_citations
+            ]
             if preferred:
                 filtered = preferred
         elif any(phrase in profile_text for phrase in ("overtime", "meal period", "rest period", "80 hours", "14 hours")):
@@ -384,13 +448,25 @@ class ConflictAnalysisService:
                 "LAB 510",
                 "LAB 511",
                 "LAB 512",
+                "LAB 860",
                 "LAB 226.7",
                 "29 U.S.C. § 207",
                 "29 U.S.C. § 218",
             )
-            preferred = [finding for finding in filtered if finding.citation.startswith(preferred_prefixes)]
+            preferred = [
+                finding
+                for finding in filtered
+                if finding.citation.startswith(preferred_prefixes) or finding.citation.rstrip(".").upper() in targeted_citations
+            ]
             if preferred:
                 filtered = preferred
+
+        if "agricultural" in profile_text and ("overtime" in profile_text or "workweek" in profile_text):
+            filtered = [
+                finding
+                for finding in filtered
+                if not (finding.source_system == "federal" and finding.citation.startswith("29 U.S.C. § 207"))
+            ] or filtered
 
         deduped: dict[str, ConflictFinding] = {}
         for finding in filtered:
