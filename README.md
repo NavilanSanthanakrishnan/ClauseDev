@@ -1,83 +1,27 @@
-# ClauseDev
+# Clause
 
-ClauseDev currently contains Step1, a standalone bill-similarity app built on top of a local OpenStates PostgreSQL restore.
+Clause is the parent application repository.
 
-Upload a bill as `pdf`, `docx`, or `txt`, and the app returns similar bills from the OpenStates corpus through a hybrid retrieval pipeline:
+Right now it contains:
 
-1. Extract and normalize the uploaded bill text.
-2. Use Codex OAuth with `gpt-5.4` to build a structured bill profile.
-3. Search a prebuilt OpenStates bill index with PostgreSQL full-text search.
-4. Rerank the candidate set locally with sentence-transformer embeddings.
-5. Run a final Codex rerank focused on policy intent, legal mechanism, and affected entities.
+- `Step1/`: the first working bill-similarity retrieval system
 
-## Repository Layout
+Step1 is the current completed slice:
 
-- `step1/app.py`: FastAPI app and HTML UI endpoints
-- `step1/services/`: extraction, Codex OAuth, database access, retrieval, reranking
-- `step1/templates/`: simple browser UI
-- `step1/static/`: frontend assets
-- `sql/bootstrap_openstates_step1.sql`: search table and index bootstrap
-- `scripts/bootstrap_db.py`: applies the SQL bootstrap
-- `scripts/download_embedding_model.py`: pre-downloads the embedding model
-- `scripts/export_sample_bills.py`: exports sample bills from OpenStates
-- `scripts/smoke_test.py`: quick local API check
+- upload a bill
+- extract the text
+- profile it with Codex OAuth `gpt-5.4`
+- retrieve similar bills from OpenStates
+- rerank them semantically
+- return the strongest matches in a simple HTML UI
 
-## Requirements
+Repository structure:
 
-- Python `3.11+`
-- PostgreSQL reachable at `127.0.0.1:55432`
-- OpenStates database: `openstates_public_compat`
-- Valid Codex OAuth session available locally
+- `Step1/README.md`: Step1 setup, run instructions, and architecture
+- `Step1/FUTURE.md`: roadmap for pushing search quality and latency much further
 
-## Setup
+Next direction:
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python scripts/bootstrap_db.py
-python scripts/download_embedding_model.py
-python scripts/export_sample_bills.py
-```
-
-## Run
-
-```bash
-source .venv/bin/activate
-uvicorn step1.app:app --host 127.0.0.1 --port 8011
-```
-
-Then open [http://127.0.0.1:8011](http://127.0.0.1:8011).
-
-## Smoke Test
-
-With the server running:
-
-```bash
-source .venv/bin/activate
-python scripts/smoke_test.py samples/wildfire.txt
-```
-
-## Configuration
-
-Local runtime settings live in `.env`. Commit `.env.example`, not `.env`.
-
-Important variables:
-
-- `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`
-- `CODEX_MODEL`
-- `LEXICAL_CANDIDATE_LIMIT`
-- `SEMANTIC_INPUT_LIMIT`
-- `LLM_RERANK_INPUT_LIMIT`
-- `FINAL_RESULT_LIMIT`
-
-## Search Design
-
-The system is intentionally hybrid:
-
-- lexical retrieval for high recall
-- local semantic reranking for contextual similarity
-- Codex final reranking for policy/mechanism judgment
-
-That is the practical path for a large legislative corpus: use indexed retrieval to narrow the search space, then spend model reasoning on the top candidates instead of the full database.
+- use Step1 as the retrieval/search foundation
+- build the broader Clause application around it
+- use the existing ClauseAI codebase as the reference for the larger workflow, UX, and report-generation path
