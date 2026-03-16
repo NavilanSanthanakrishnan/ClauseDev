@@ -16,6 +16,7 @@ This app uses:
 - PostgreSQL `california_code` for California statutes
 - PostgreSQL `uscode_local` for federal U.S. Code sections and provisions
 - local semantic reranking to narrow candidate statutes before the final LLM pass
+- deterministic wage-and-hour conflict rules as a safety net for obvious statute collisions
 
 ## Setup
 
@@ -47,6 +48,25 @@ uvicorn step4.app:app --host 127.0.0.1 --port 8012
 
 Then open [http://127.0.0.1:8012](http://127.0.0.1:8012).
 
+## Test
+
+Unit tests:
+
+```bash
+cd /Users/navilan/Documents/Clause/Step4
+source .venv/bin/activate
+pytest -q
+```
+
+API smoke tests with the included synthetic bills:
+
+```bash
+cd /Users/navilan/Documents/Clause/Step4
+source .venv/bin/activate
+python scripts/smoke_test.py samples/overtime_conflict.txt
+python scripts/smoke_test.py samples/minimum_wage_conflict.txt
+```
+
 ## Expected Databases
 
 - California: `california_code`
@@ -63,3 +83,4 @@ Default connection details are in `.env.example`.
   2. retrieve likely California and federal statutes
   3. semantically rerank them
   4. use Codex to decide which are actual conflicts
+  5. apply deterministic pattern-based backstops for obvious wage/hour conflicts that should never be missed
