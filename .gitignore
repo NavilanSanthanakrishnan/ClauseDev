@@ -16,7 +16,15 @@ htmlcov/
 **/.env
 **/.venv/
 **/uploads/
+**/*.db
+**/*.sqlite
+**/*.sqlite3
 *.log
+Step2/CaliforniaCodeData/
+Step2/data/
+Step2/cache/
+Step2/uscode/uscode_local.db
+Step2/uscode/xml_uscAll_current.zip
 
 # Editors
 .idea/
