@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <main class="shell">
+        <section class="hero">
+            <p class="eyebrow">Step 1</p>
+            <h1>Upload a bill and pull the strongest similar bills from OpenStates.</h1>
+            <p class="lede">
+                This test interface extracts the uploaded bill, builds a semantic search profile with Codex OAuth,
+                retrieves candidates from the 1.5M-bill corpus, reranks them, and returns the strongest analogs.
+            </p>
+        </section>
+
+        <section class="panel">
+            <form id="upload-form">
+                <label class="upload">
+                    <span>Bill file</span>
+                    <input type="file" id="bill-file" name="file" accept=".pdf,.docx,.txt" required>
+                </label>
+                <button type="submit" id="submit-button">Find Similar Bills</button>
+            </form>
+            <p id="status" class="status idle">Waiting for a bill file.</p>
+        </section>
+
+        <section id="profile-panel" class="panel hidden">
+            <div class="panel-header">
+                <h2>Extracted Bill Profile</h2>
+            </div>
+            <div class="grid">
+                <article class="card">
+                    <h3>Title</h3>
+                    <p id="profile-title"></p>
+                </article>
+                <article class="card">
+                    <h3>Description</h3>
+                    <p id="profile-description"></p>
+                </article>
+                <article class="card wide">
+                    <h3>Summary</h3>
+                    <p id="profile-summary"></p>
+                </article>
+                <article class="card">
+                    <h3>Policy Domains</h3>
+                    <div id="profile-domains" class="chips"></div>
+                </article>
+                <article class="card">
+                    <h3>Mechanisms</h3>
+                    <div id="profile-mechanisms" class="chips"></div>
+                </article>
+                <article class="card">
+                    <h3>Search Phrases</h3>
+                    <div id="profile-search-phrases" class="chips"></div>
+                </article>
+            </div>
+        </section>
+
+        <section id="results-panel" class="panel hidden">
+            <div class="panel-header">
+                <h2>Similar Bills</h2>
+                <p id="timings"></p>
+            </div>
+            <div id="results"></div>
+        </section>
+    </main>
+    <script src="/static/app.js"></script>
+</body>
+</html>
+
