@@ -468,6 +468,33 @@ class ConflictAnalysisService:
                 if not (finding.source_system == "federal" and finding.citation.startswith("29 U.S.C. § 207"))
             ] or filtered
 
+        daily_overtime_only = (
+            "40-hour workweek" in profile_text
+            and any(
+                phrase in profile_text
+                for phrase in (
+                    "10 hours per day within a 40-hour workweek",
+                    "without the obligation to pay overtime compensation for those additional hours in a workday",
+                    "without daily overtime",
+                )
+            )
+            and not any(
+                phrase in profile_text
+                for phrase in (
+                    "80 hours",
+                    "48 hours in a workweek",
+                    "32 hours in a workweek",
+                    "more than 40 hours in a workweek",
+                )
+            )
+        )
+        if daily_overtime_only:
+            filtered = [
+                finding
+                for finding in filtered
+                if not (finding.source_system == "federal" and finding.citation.startswith("29 U.S.C. § 207"))
+            ] or filtered
+
         deduped: dict[str, ConflictFinding] = {}
         for finding in filtered:
             family = re.sub(r"\([^)]+\)$", "", finding.citation).strip()

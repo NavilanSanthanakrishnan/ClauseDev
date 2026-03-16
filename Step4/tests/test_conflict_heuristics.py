@@ -122,3 +122,41 @@ def test_postprocess_drops_federal_207_for_agricultural_overtime_bill() -> None:
     filtered = service._postprocess_findings(profile=profile, findings=findings)
 
     assert [finding.citation for finding in filtered] == ["LAB 860"]
+
+
+def test_postprocess_drops_federal_207_for_daily_overtime_only_bill() -> None:
+    service = ConflictAnalysisService.__new__(ConflictAnalysisService)
+    profile = UploadedBillProfile(
+        summary="Employment bill allowing workdays up to 10 hours per day within a 40-hour workweek without the obligation to pay overtime compensation for those additional hours in a workday.",
+        key_clauses=[BillClause(label="flex schedule", effect="permission", text="An employee-selected flexible work schedule may provide for workdays up to 10 hours per day within a 40-hour workweek.")],
+    )
+    findings = [
+        ConflictFinding(
+            candidate_id="california:lab-510",
+            source_system="california",
+            source_kind="section",
+            citation="LAB 510",
+            conflict_type="state contradiction",
+            severity="high",
+            confidence=0.95,
+            bill_excerpt="",
+            statute_excerpt="",
+            explanation="",
+        ),
+        ConflictFinding(
+            candidate_id="federal:29usc207",
+            source_system="federal",
+            source_kind="section",
+            citation="29 U.S.C. § 207",
+            conflict_type="compliance impossibility",
+            severity="high",
+            confidence=0.8,
+            bill_excerpt="",
+            statute_excerpt="",
+            explanation="",
+        ),
+    ]
+
+    filtered = service._postprocess_findings(profile=profile, findings=findings)
+
+    assert [finding.citation for finding in filtered] == ["LAB 510"]
