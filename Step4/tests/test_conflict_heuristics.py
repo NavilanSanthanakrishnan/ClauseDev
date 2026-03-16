@@ -84,6 +84,7 @@ def test_amendment_conflict_identifies_operable_california_section() -> None:
     assert findings
     assert findings[0].citation == "LAB 510."
     assert findings[0].conflict_type == "state contradiction"
+    assert findings[0].finding_bucket == "direct_amendment"
 
 
 def test_postprocess_drops_federal_207_for_agricultural_overtime_bill() -> None:
@@ -160,3 +161,26 @@ def test_postprocess_drops_federal_207_for_daily_overtime_only_bill() -> None:
     filtered = service._postprocess_findings(profile=profile, findings=findings)
 
     assert [finding.citation for finding in filtered] == ["LAB 510"]
+
+
+def test_postprocess_relabels_civil_rights_federal_findings() -> None:
+    service = ConflictAnalysisService.__new__(ConflictAnalysisService)
+    profile = UploadedBillProfile(summary="Zoning rule affecting recovery homes and people with disabilities.")
+    findings = [
+        ConflictFinding(
+            candidate_id="federal:ada",
+            source_system="federal",
+            source_kind="section",
+            citation="42 U.S.C. § 12132",
+            conflict_type="federal preemption",
+            severity="medium",
+            confidence=0.6,
+            bill_excerpt="",
+            statute_excerpt="",
+            explanation="Potential disability discrimination exposure.",
+        )
+    ]
+
+    filtered = service._postprocess_findings(profile=profile, findings=findings)
+
+    assert filtered[0].finding_bucket == "civil_rights_risk"

@@ -57,6 +57,7 @@ class ConflictFinding(BaseModel):
     heading: str = ""
     hierarchy_path: str = ""
     source_url: Optional[str] = None
+    finding_bucket: str = "hard_conflict"
     conflict_type: str
     severity: str
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -68,6 +69,7 @@ class ConflictFinding(BaseModel):
 
 class ConflictJudgeItem(BaseModel):
     candidate_id: str
+    finding_bucket: str = "hard_conflict"
     conflict_type: str
     severity: str
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -84,6 +86,7 @@ class ConflictJudgeResponse(BaseModel):
 
 class CandidateVerificationResponse(BaseModel):
     is_conflict: bool = False
+    finding_bucket: str = "hard_conflict"
     conflict_type: str = ""
     severity: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)

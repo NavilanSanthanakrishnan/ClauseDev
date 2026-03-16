@@ -44,6 +44,7 @@ Expected JSON:
   "conflicts": [
     {
       "candidate_id": "",
+      "finding_bucket": "direct_amendment|hard_conflict|federal_preemption|civil_rights_risk|implementation_constraint",
       "conflict_type": "state contradiction|federal preemption|permission-versus-prohibition|procedure conflict|threshold conflict|compliance impossibility",
       "severity": "high|medium|low",
       "confidence": 0.0,
@@ -60,6 +61,8 @@ Rules:
 - Only use `candidate_id` values from the provided candidates.
 - Quote or closely reproduce exact bill/statute excerpts from the provided material only.
 - Prefer direct contradictions over broad policy adjacency.
+- Use `direct_amendment` when the bill expressly rewrites the cited statute itself.
+- Use `civil_rights_risk` or `implementation_constraint` for softer exposure theories instead of overstating them as hard contradictions.
 - For federal candidates, treat federal floor statutes as conflicting when the bill would authorize conduct below the federal minimum protection or would deem unlawful under federal law to be lawful under state law.
 - For federal wage-and-hour conflicts, prefer the most specific statute that actually matches the bill's problem. If the bill tries to wipe out stricter state or local protections, prefer a federal savings-clause statute like 29 U.S.C. § 218 over a generic minimum-wage floor statute.
 - Do not include a candidate if your own explanation says there is no direct conflict.
@@ -71,6 +74,7 @@ PAIRWISE_VERIFICATION_PROMPT = """You are verifying one candidate statute agains
 Return ONLY valid JSON:
 {
   "is_conflict": true,
+  "finding_bucket": "direct_amendment|hard_conflict|federal_preemption|civil_rights_risk|implementation_constraint",
   "conflict_type": "",
   "severity": "high|medium|low",
   "confidence": 0.0,
@@ -247,6 +251,7 @@ class ConflictAnalysisService:
                     heading=candidate.heading,
                     hierarchy_path=candidate.hierarchy_path,
                     source_url=candidate.source_url,
+                    finding_bucket="direct_amendment",
                     conflict_type="state contradiction",
                     severity="high",
                     confidence=0.94,
@@ -318,6 +323,7 @@ class ConflictAnalysisService:
                 heading=candidate.heading,
                 hierarchy_path=candidate.hierarchy_path,
                 source_url=candidate.source_url,
+                finding_bucket=item.finding_bucket,
                 conflict_type=item.conflict_type,
                 severity=item.severity,
                 confidence=item.confidence,
@@ -383,6 +389,7 @@ class ConflictAnalysisService:
                 heading=candidate.heading,
                 hierarchy_path=candidate.hierarchy_path,
                 source_url=candidate.source_url,
+                finding_bucket=response.finding_bucket or "hard_conflict",
                 conflict_type=response.conflict_type,
                 severity=response.severity,
                 confidence=response.confidence,
@@ -418,6 +425,13 @@ class ConflictAnalysisService:
             return []
 
         targeted_citations = {citation.rstrip(".").upper() for citation in [*profile.amended_citations, *profile.repealed_citations]}
+        for finding in findings:
+            if finding.finding_bucket == "hard_conflict" and finding.source_system == "federal":
+                if finding.citation.startswith(("42 U.S.C. § 12132", "29 U.S.C. § 794", "42 U.S.C. § 3604")):
+                    finding.finding_bucket = "civil_rights_risk"
+                elif finding.conflict_type == "federal preemption":
+                    finding.finding_bucket = "federal_preemption"
+
         profile_text = " ".join(
             [profile.summary, *profile.permissions_created, *profile.required_actions, *(clause.text for clause in profile.key_clauses)]
         ).lower()
@@ -527,6 +541,7 @@ class ConflictAnalysisService:
                     heading=candidate.heading,
                     hierarchy_path=candidate.hierarchy_path,
                     source_url=candidate.source_url,
+                    finding_bucket="federal_preemption" if source_system == "federal" else "hard_conflict",
                     conflict_type=conflict_type,
                     severity="high" if confidence >= 0.9 else "medium",
                     confidence=confidence,
@@ -627,6 +642,7 @@ class ConflictAnalysisService:
                     heading=candidate.heading,
                     hierarchy_path=candidate.hierarchy_path,
                     source_url=candidate.source_url,
+                    finding_bucket="federal_preemption" if conflict_type == "federal preemption" else "hard_conflict",
                     conflict_type=conflict_type,
                     severity="high" if confidence >= 0.9 else "medium",
                     confidence=confidence,
