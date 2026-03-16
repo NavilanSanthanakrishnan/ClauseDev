@@ -53,6 +53,12 @@ class Settings:
     uscode_postgres_user: str = os.getenv("USCODE_POSTGRES_USER", "navilan")
     uscode_postgres_password: str = os.getenv("USCODE_POSTGRES_PASSWORD", "")
 
+    openstates_postgres_host: str = os.getenv("OPENSTATES_POSTGRES_HOST", "127.0.0.1")
+    openstates_postgres_port: int = _int_env("OPENSTATES_POSTGRES_PORT", 55432)
+    openstates_postgres_db: str = os.getenv("OPENSTATES_POSTGRES_DB", "openstates_public_compat")
+    openstates_postgres_user: str = os.getenv("OPENSTATES_POSTGRES_USER", "navilan")
+    openstates_postgres_password: str = os.getenv("OPENSTATES_POSTGRES_PASSWORD", "")
+
     postgres_min_pool_size: int = _int_env("POSTGRES_MIN_POOL_SIZE", 1)
     postgres_max_pool_size: int = _int_env("POSTGRES_MAX_POOL_SIZE", 4)
 
@@ -100,6 +106,16 @@ class Settings:
             db=self.uscode_postgres_db,
             user=self.uscode_postgres_user,
             password=self.uscode_postgres_password,
+        )
+
+    @property
+    def openstates_dsn(self) -> str:
+        return _dsn(
+            host=self.openstates_postgres_host,
+            port=self.openstates_postgres_port,
+            db=self.openstates_postgres_db,
+            user=self.openstates_postgres_user,
+            password=self.openstates_postgres_password,
         )
 
 
