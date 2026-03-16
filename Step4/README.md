@@ -39,6 +39,22 @@ source .venv/bin/activate
 python scripts/bootstrap_legal_search.py
 ```
 
+## Build Canonical Legal Index
+
+This creates a unified PostgreSQL corpus that normalizes California code and the U.S. Code into one section-level legal index for future multi-lane retrieval.
+
+```bash
+cd /Users/navilan/Documents/Clause/Step4
+source .venv/bin/activate
+python scripts/build_legal_index.py
+```
+
+For a lighter initial build that skips U.S. Code provision rows:
+
+```bash
+python scripts/build_legal_index.py --skip-provisions
+```
+
 ## Run
 
 ```bash
@@ -92,6 +108,7 @@ The review loop uses the `TestingAgent` service to ask Codex whether the returne
 
 - California: `california_code`
 - Federal: `uscode_local`
+- Canonical index: `clause_legal_index`
 
 Default connection details are in `.env.example`.
 

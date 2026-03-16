@@ -11,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 from step4.config import get_settings
 from step4.models import LegalCandidate, UploadedBillProfile
 from step4.services.database import Database
+from step4.services.legal_index import alias_forms, normalize_citation
 
 
 GENERIC_STOPWORDS = {
@@ -240,31 +241,6 @@ class LegalRetriever:
         return list(OrderedDict.fromkeys(matches))
 
     def _retrieve_california(self, profile: UploadedBillProfile) -> list[LegalCandidate]:
-        candidates: dict[tuple[str, str], LegalCandidate] = {}
-        queries = self._query_phrases(profile)
-        for query in queries:
-            sanitized = _sanitize_tsquery(query)
-            if not sanitized:
-                continue
-            rows = self.db.california.fetch_all(
-                """
-                SELECT
-                    section_id::text AS document_id,
-                    citation,
-                    COALESCE(article_name, chapter_name, division_name, code_name, citation) AS heading,
-                    COALESCE(hierarchy_path, '') AS hierarchy_path,
-                    display_url AS source_url,
-                    body_text,
-                    ts_rank_cd(search_vector, websearch_to_tsquery('english', %(query)s)) AS rank
-                FROM section_search
-                WHERE search_vector @@ websearch_to_tsquery('english', %(query)s)
-                ORDER BY rank DESC
-                LIMIT %(limit)s
-                """,
-                {"query": sanitized, "limit": self.settings.california_lexical_limit},
-            )
-            self._merge_candidates(candidates, rows, query, "california", "section")
-
         prioritized_citations = list(
             OrderedDict.fromkeys(
                 [
@@ -275,127 +251,148 @@ class LegalRetriever:
                 ]
             )
         )
-        for idx, citation in enumerate(prioritized_citations):
-            rows = self.db.california.fetch_all(
-                """
-                SELECT
-                    section_id::text AS document_id,
-                    citation,
-                    COALESCE(article_name, chapter_name, division_name, code_name, citation) AS heading,
-                    COALESCE(hierarchy_path, '') AS hierarchy_path,
-                    display_url AS source_url,
-                    body_text,
-                    1.0 AS rank
-                FROM section_search
-                WHERE citation ILIKE %(citation)s || '%%'
-                LIMIT 10
-                """,
-                {"citation": citation},
-            )
-            self._merge_candidates(candidates, rows, citation, "california", "section", exact_boost=2.2 if idx == 0 else 1.7)
-
-        return self._finalize_candidates(profile, list(candidates.values()))
+        return self._retrieve_from_legal_index(
+            profile,
+            source_system="california",
+            jurisdiction="CA",
+            lexical_limit=self.settings.california_lexical_limit,
+            prioritized_citations=prioritized_citations,
+        )
 
     def _retrieve_uscode(self, profile: UploadedBillProfile) -> list[LegalCandidate]:
+        return self._retrieve_from_legal_index(
+            profile,
+            source_system="federal",
+            jurisdiction="US",
+            lexical_limit=self.settings.uscode_lexical_limit,
+            prioritized_citations=self._normalized_uscode_citations(profile),
+        )
+
+    def _retrieve_from_legal_index(
+        self,
+        profile: UploadedBillProfile,
+        *,
+        source_system: str,
+        jurisdiction: str,
+        lexical_limit: int,
+        prioritized_citations: list[str],
+    ) -> list[LegalCandidate]:
         candidates: dict[tuple[str, str], LegalCandidate] = {}
         queries = self._query_phrases(profile)
         for query in queries:
             sanitized = _sanitize_tsquery(query)
             if not sanitized:
                 continue
-
-            section_rows = self.db.uscode.fetch_all(
+            rows = self.db.legal_index.fetch_all(
                 """
                 SELECT
-                    identifier AS document_id,
+                    document_id,
+                    source_kind,
                     citation,
                     COALESCE(heading, citation) AS heading,
-                    COALESCE(breadcrumb, '') AS hierarchy_path,
-                    cornell_url AS source_url,
-                    COALESCE(full_text, content_text, '') AS body_text,
-                    ts_rank_cd(
-                        to_tsvector(
-                            'english',
-                            COALESCE(citation, '') || ' ' ||
-                            COALESCE(label, '') || ' ' ||
-                            COALESCE(heading, '') || ' ' ||
-                            COALESCE(breadcrumb, '') || ' ' ||
-                            COALESCE(content_text, '') || ' ' ||
-                            COALESCE(full_text, '')
-                        ),
-                        websearch_to_tsquery('english', %(query)s)
-                    ) AS rank
-                FROM usc_sections
-                WHERE to_tsvector(
-                    'english',
-                    COALESCE(citation, '') || ' ' ||
-                    COALESCE(label, '') || ' ' ||
-                    COALESCE(heading, '') || ' ' ||
-                    COALESCE(breadcrumb, '') || ' ' ||
-                    COALESCE(content_text, '') || ' ' ||
-                    COALESCE(full_text, '')
-                ) @@ websearch_to_tsquery('english', %(query)s)
+                    COALESCE(hierarchy_path, '') AS hierarchy_path,
+                    source_url,
+                    body_text,
+                    ts_rank_cd(search_text, websearch_to_tsquery('english', %(query)s)) AS rank
+                FROM legal_document_search
+                WHERE source_system = %(source_system)s
+                  AND jurisdiction = %(jurisdiction)s
+                  AND search_text @@ websearch_to_tsquery('english', %(query)s)
                 ORDER BY rank DESC
                 LIMIT %(limit)s
                 """,
-                {"query": sanitized, "limit": self.settings.uscode_lexical_limit},
+                {
+                    "query": sanitized,
+                    "source_system": source_system,
+                    "jurisdiction": jurisdiction,
+                    "limit": lexical_limit,
+                },
             )
-            self._merge_candidates(candidates, section_rows, query, "federal", "section")
+            self._merge_candidates(candidates, rows, query, source_system, None)
 
-            provision_rows = self.db.uscode.fetch_all(
+        for idx, citation in enumerate(prioritized_citations):
+            exact_rows = self.db.legal_index.fetch_all(
                 """
                 SELECT
-                    p.identifier AS document_id,
-                    p.citation,
-                    COALESCE(p.heading, s.heading, p.citation) AS heading,
-                    COALESCE(s.breadcrumb, '') AS hierarchy_path,
-                    s.cornell_url AS source_url,
-                    COALESCE(p.full_text, p.direct_text, '') AS body_text,
-                    ts_rank_cd(
-                        to_tsvector(
-                            'english',
-                            COALESCE(p.citation, '') || ' ' ||
-                            COALESCE(p.heading, '') || ' ' ||
-                            COALESCE(p.direct_text, '') || ' ' ||
-                            COALESCE(p.full_text, '')
-                        ),
-                        websearch_to_tsquery('english', %(query)s)
-                    ) AS rank
-                FROM usc_provisions p
-                JOIN usc_sections s
-                  ON s.identifier = p.section_identifier
-                WHERE to_tsvector(
-                    'english',
-                    COALESCE(p.citation, '') || ' ' ||
-                    COALESCE(p.heading, '') || ' ' ||
-                    COALESCE(p.direct_text, '') || ' ' ||
-                    COALESCE(p.full_text, '')
-                ) @@ websearch_to_tsquery('english', %(query)s)
-                ORDER BY rank DESC
-                LIMIT %(limit)s
-                """,
-                {"query": sanitized, "limit": max(10, self.settings.uscode_lexical_limit // 2)},
-            )
-            self._merge_candidates(candidates, provision_rows, query, "federal", "provision")
-
-        for citation in self._normalized_uscode_citations(profile):
-            rows = self.db.uscode.fetch_all(
-                """
-                SELECT
-                    identifier AS document_id,
-                    citation,
-                    COALESCE(heading, citation) AS heading,
-                    COALESCE(breadcrumb, '') AS hierarchy_path,
-                    cornell_url AS source_url,
-                    COALESCE(full_text, content_text, '') AS body_text,
+                    d.document_id,
+                    d.source_kind,
+                    d.citation,
+                    COALESCE(d.heading, d.citation) AS heading,
+                    COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                    d.source_url,
+                    d.body_text,
                     1.0 AS rank
-                FROM usc_sections
-                WHERE citation ILIKE %(citation)s || '%%'
-                LIMIT 10
+                FROM legal_documents d
+                WHERE d.source_system = %(source_system)s
+                  AND d.jurisdiction = %(jurisdiction)s
+                  AND d.normalized_citation = %(normalized_citation)s
+                LIMIT 20
                 """,
-                {"citation": citation},
+                {
+                    "source_system": source_system,
+                    "jurisdiction": jurisdiction,
+                    "normalized_citation": normalize_citation(citation),
+                },
             )
-            self._merge_candidates(candidates, rows, citation, "federal", "section", exact_boost=1.5)
+            self._merge_candidates(candidates, exact_rows, citation, source_system, None, exact_boost=2.4 if idx == 0 else 1.8)
+
+            alias_seen = set()
+            for alias in alias_forms(citation):
+                alias_rows = self.db.legal_index.fetch_all(
+                    """
+                    SELECT
+                        d.document_id,
+                        d.source_kind,
+                        d.citation,
+                        COALESCE(d.heading, d.citation) AS heading,
+                        COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                        d.source_url,
+                        d.body_text,
+                        0.9 AS rank
+                    FROM legal_aliases a
+                    JOIN legal_documents d
+                      ON d.document_id = a.document_id
+                    WHERE d.source_system = %(source_system)s
+                      AND d.jurisdiction = %(jurisdiction)s
+                      AND a.normalized_alias = %(normalized_alias)s
+                    LIMIT 20
+                    """,
+                    {
+                        "source_system": source_system,
+                        "jurisdiction": jurisdiction,
+                        "normalized_alias": normalize_citation(alias),
+                    },
+                )
+                for row in alias_rows:
+                    alias_seen.add(row["citation"])
+                self._merge_candidates(candidates, alias_rows, alias, source_system, None, exact_boost=1.6)
+
+                reference_rows = self.db.legal_index.fetch_all(
+                    """
+                    SELECT
+                        d.document_id,
+                        d.source_kind,
+                        d.citation,
+                        COALESCE(d.heading, d.citation) AS heading,
+                        COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                        d.source_url,
+                        d.body_text,
+                        0.7 AS rank
+                    FROM legal_references r
+                    JOIN legal_documents d
+                      ON d.document_id = r.document_id
+                    WHERE d.source_system = %(source_system)s
+                      AND d.jurisdiction = %(jurisdiction)s
+                      AND r.normalized_referenced_citation = %(normalized_alias)s
+                    LIMIT 20
+                    """,
+                    {
+                        "source_system": source_system,
+                        "jurisdiction": jurisdiction,
+                        "normalized_alias": normalize_citation(alias),
+                    },
+                )
+                self._merge_candidates(candidates, reference_rows, alias, source_system, None, exact_boost=1.25)
 
         return self._finalize_candidates(profile, list(candidates.values()))
 
@@ -405,7 +402,7 @@ class LegalRetriever:
         rows: list[dict],
         query: str,
         source_system: str,
-        source_kind: str,
+        source_kind: str | None,
         exact_boost: float = 1.0,
     ) -> None:
         for row in rows:
@@ -414,7 +411,7 @@ class LegalRetriever:
                 existing[key] = LegalCandidate(
                     document_id=row["document_id"],
                     source_system=source_system,
-                    source_kind=source_kind,
+                    source_kind=(row.get("source_kind") or source_kind or "section"),
                     citation=row["citation"],
                     heading=row.get("heading") or "",
                     hierarchy_path=row.get("hierarchy_path") or "",
@@ -425,7 +422,7 @@ class LegalRetriever:
             candidate.lexical_score += float(row.get("rank") or 0.0) * exact_boost
             if query not in candidate.matched_queries:
                 candidate.matched_queries.append(query)
-            if source_kind == "provision" and candidate.source_kind != "provision":
+            if (row.get("source_kind") or source_kind) == "provision" and candidate.source_kind != "provision":
                 candidate.source_kind = "provision"
 
     def _finalize_candidates(self, profile: UploadedBillProfile, candidates: list[LegalCandidate]) -> list[LegalCandidate]:

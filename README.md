@@ -23,6 +23,7 @@ Repository structure:
 - `Step1/FUTURE.md`: roadmap for pushing search quality and latency much further
 - `Step2/README.md`: California-code ingestion, official bulk load, and law database instructions
 - `Step4/README.md`: conflict-finder setup, search bootstrap, official benchmark runner, and run instructions
+- `Step4/sql/schema_legal_index.sql`: canonical legal-index schema for unifying California and federal statutes
 
 Next direction:
 

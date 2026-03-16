@@ -53,6 +53,12 @@ class Settings:
     uscode_postgres_user: str = os.getenv("USCODE_POSTGRES_USER", "navilan")
     uscode_postgres_password: str = os.getenv("USCODE_POSTGRES_PASSWORD", "")
 
+    legal_index_postgres_host: str = os.getenv("LEGAL_INDEX_POSTGRES_HOST", "127.0.0.1")
+    legal_index_postgres_port: int = _int_env("LEGAL_INDEX_POSTGRES_PORT", 55432)
+    legal_index_postgres_db: str = os.getenv("LEGAL_INDEX_POSTGRES_DB", "clause_legal_index")
+    legal_index_postgres_user: str = os.getenv("LEGAL_INDEX_POSTGRES_USER", "navilan")
+    legal_index_postgres_password: str = os.getenv("LEGAL_INDEX_POSTGRES_PASSWORD", "")
+
     openstates_postgres_host: str = os.getenv("OPENSTATES_POSTGRES_HOST", "127.0.0.1")
     openstates_postgres_port: int = _int_env("OPENSTATES_POSTGRES_PORT", 55432)
     openstates_postgres_db: str = os.getenv("OPENSTATES_POSTGRES_DB", "openstates_public_compat")
@@ -106,6 +112,16 @@ class Settings:
             db=self.uscode_postgres_db,
             user=self.uscode_postgres_user,
             password=self.uscode_postgres_password,
+        )
+
+    @property
+    def legal_index_dsn(self) -> str:
+        return _dsn(
+            host=self.legal_index_postgres_host,
+            port=self.legal_index_postgres_port,
+            db=self.legal_index_postgres_db,
+            user=self.legal_index_postgres_user,
+            password=self.legal_index_postgres_password,
         )
 
     @property

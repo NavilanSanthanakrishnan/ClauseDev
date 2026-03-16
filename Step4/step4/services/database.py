@@ -20,6 +20,16 @@ REQUIRED_USCODE_OBJECTS = [
     "step4_usc_provision_search",
 ]
 
+REQUIRED_LEGAL_INDEX_OBJECTS = [
+    "legal_documents",
+    "legal_aliases",
+    "legal_references",
+    "legal_document_search",
+    "idx_legal_documents_search",
+    "idx_legal_aliases_lookup",
+    "idx_legal_references_lookup",
+]
+
 
 @dataclass
 class QueryDatabase:
@@ -59,16 +69,26 @@ class Database:
             kwargs={"autocommit": True, "row_factory": dict_row},
             open=False,
         )
+        self.legal_index_pool = ConnectionPool(
+            conninfo=self.settings.legal_index_dsn,
+            min_size=self.settings.postgres_min_pool_size,
+            max_size=self.settings.postgres_max_pool_size,
+            kwargs={"autocommit": True, "row_factory": dict_row},
+            open=False,
+        )
         self.california = QueryDatabase("california", self.california_pool)
         self.uscode = QueryDatabase("uscode", self.uscode_pool)
+        self.legal_index = QueryDatabase("legal_index", self.legal_index_pool)
 
     def open(self) -> None:
         self.california_pool.open(wait=True)
         self.uscode_pool.open(wait=True)
+        self.legal_index_pool.open(wait=True)
 
     def close(self) -> None:
         self.california_pool.close()
         self.uscode_pool.close()
+        self.legal_index_pool.close()
 
     def missing_indexes(self) -> dict[str, list[str]]:
         california_rows = self.california.fetch_all(
@@ -93,9 +113,26 @@ class Database:
             WHERE schemaname = 'public'
             """
         )
+        legal_index_rows = self.legal_index.fetch_all(
+            """
+            SELECT tablename AS object_name
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            UNION
+            SELECT indexname AS object_name
+            FROM pg_indexes
+            WHERE schemaname = 'public'
+            UNION
+            SELECT viewname AS object_name
+            FROM pg_views
+            WHERE schemaname = 'public'
+            """
+        )
         california_seen = {row["object_name"] for row in california_rows}
         uscode_seen = {row["object_name"] for row in uscode_rows}
+        legal_index_seen = {row["object_name"] for row in legal_index_rows}
         return {
             "california": [name for name in REQUIRED_CALIFORNIA_OBJECTS if name not in california_seen],
             "uscode": [name for name in REQUIRED_USCODE_OBJECTS if name not in uscode_seen],
+            "legal_index": [name for name in REQUIRED_LEGAL_INDEX_OBJECTS if name not in legal_index_seen],
         }
