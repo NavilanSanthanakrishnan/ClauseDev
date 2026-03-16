@@ -15,7 +15,9 @@ This app uses:
 - Codex OAuth `gpt-5.4` for bill profiling and final conflict judgment
 - PostgreSQL `california_code` for California statutes
 - PostgreSQL `uscode_local` for federal U.S. Code sections and provisions
+- a unified PostgreSQL `clause_legal_index` corpus with hierarchy, aliases, references, and semantic profiles
 - local semantic reranking to narrow candidate statutes before the final LLM pass
+- agentic retrieval over explicit DB tools (`citation_lookup`, `text_search`, `semantic_overlay`, `reference_expansion`, `hierarchy_neighbors`) before final reranking
 - amendment-aware conflict detection for bills that expressly change current California code sections
 - deterministic California drafting/process checks for codification defects, chapter-range mismatches, and building-standards timing/enforcement problems
 - deterministic wage-and-hour conflict rules as a safety net for obvious statute collisions
@@ -140,10 +142,11 @@ Default connection details are in `.env.example`.
 - The local sentence-transformer reranker is now loaded with `local_files_only=True` so benchmark runs do not depend on live Hugging Face availability.
 - The app is designed around staged retrieval:
   1. profile the uploaded bill
-  2. retrieve likely California and federal statutes
-  3. semantically rerank them
-  4. use Codex to decide which are actual conflicts
-  5. apply deterministic California drafting/process and wage/hour backstops that should never be missed
+  2. retrieve likely California and federal statutes from the canonical legal index
+  3. let Codex plan short agentic search rounds over structured DB tools to fill recall gaps
+  4. semantically rerank the expanded candidate pool
+  5. use Codex to decide which are actual conflicts
+  6. apply deterministic California drafting/process and wage/hour backstops that should never be missed
 - The result buckets now distinguish:
   - `codification_conflict`
   - `direct_amendment`

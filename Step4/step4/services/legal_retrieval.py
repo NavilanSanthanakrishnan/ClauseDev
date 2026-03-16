@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections import Counter, OrderedDict
@@ -10,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 
 from step4.config import get_settings
 from step4.models import LegalCandidate, UploadedBillProfile
+from step4.services.codex_client import CodexClient
 from step4.services.database import Database
 from step4.services.legal_index import alias_forms, normalize_citation
 
@@ -46,12 +48,44 @@ GENERIC_STOPWORDS = {
 }
 
 CALIFORNIA_CODE_NAMES = {
-    "labor code": "LAB",
-    "welfare and institutions code": "WIC",
     "government code": "GOV",
     "health and safety code": "HSC",
+    "labor code": "LAB",
     "penal code": "PEN",
+    "public resources code": "PRC",
+    "public utilities code": "PUC",
+    "welfare and institutions code": "WIC",
 }
+
+AGENTIC_SEARCH_PROMPT = """You are a legal retrieval planner operating over a structured statute database.
+
+Return ONLY valid JSON:
+{
+  "stop": false,
+  "reason": "",
+  "actions": [
+    {
+      "tool": "citation_lookup|text_search|semantic_overlay|reference_expansion|hierarchy_neighbors",
+      "source_system": "california|federal",
+      "query": "",
+      "citation": "",
+      "overlay": "",
+      "limit": 6,
+      "reason": ""
+    }
+  ]
+}
+
+Rules:
+- Use these tools to find stronger or missing conflicting statutes, not just more topical neighbors.
+- Prefer targeted, high-value searches over broad searches.
+- Use `citation_lookup` for explicit cites, likely omitted statutes, or sections suggested by the current hits.
+- Use `hierarchy_neighbors` when a current hit suggests the surrounding chapter/article/title is likely relevant.
+- Use `reference_expansion` when a current or explicit citation probably points to implementing, savings-clause, or related sections.
+- Use `semantic_overlay` only with overlays from the prompt.
+- Stop when the current candidate families already cover likely direct conflicts and implementation constraints for this source system.
+- Do not exceed the action limit.
+"""
 
 
 def _normalize_text(text: str) -> str:
@@ -129,10 +163,14 @@ class LegalRetriever:
     def __init__(self, db: Database) -> None:
         self.db = db
         self.settings = get_settings()
+        self.codex = CodexClient()
 
     def retrieve(self, profile: UploadedBillProfile) -> dict[str, list[LegalCandidate]]:
         california = self._retrieve_california(profile)
         federal = self._retrieve_uscode(profile)
+        if self.settings.agentic_search_enabled:
+            california = self._agentic_expand(profile, california, source_system="california", jurisdiction="CA")
+            federal = self._agentic_expand(profile, federal, source_system="federal", jurisdiction="US")
         california = self._semantic_rerank(profile, california)
         federal = self._semantic_rerank(profile, federal)
         return {
@@ -221,6 +259,8 @@ class LegalRetriever:
             overlays.extend(["overtime_floor", "labor_employment"])
         if any(term in text for term in ("regional center", "developmental disability", "foster child")):
             overlays.extend(["child_welfare", "disability_civil_rights"])
+        if any(term in text for term in ("building standards", "california building standards code", "calgreen", "energy commission")):
+            overlays.extend(["building_standards_process", "california_fund_structure"])
         return list(OrderedDict.fromkeys(overlays))
 
     def _citation_sources(self, profile: UploadedBillProfile) -> list[str]:
@@ -262,10 +302,52 @@ class LegalRetriever:
                 matches.append(f"{match.group(1)} U.S.C. § {match.group(2)}")
         return list(OrderedDict.fromkeys(matches))
 
+    def _domain_hint_citations(self, profile: UploadedBillProfile, *, source_system: str) -> list[str]:
+        text = " ".join(
+            [
+                profile.title,
+                profile.summary,
+                *profile.policy_domains,
+                *profile.required_actions,
+                *profile.permissions_created,
+                *profile.enforcement_mechanisms,
+                *profile.conflict_search_phrases,
+                *(clause.text for clause in profile.key_clauses),
+            ]
+        ).lower()
+        hints: list[str] = []
+        if source_system == "california":
+            if any(term in text for term in ("building standards", "california building standards code", "calgreen", "permit application", "energy commission")):
+                hints.extend(
+                    [
+                        "PRC 25402",
+                        "PRC 25402.1",
+                        "PRC 25402.11",
+                        "HSC 18930",
+                        "HSC 18938.5",
+                        "HSC 18941.17",
+                        "HSC 18949.6",
+                        "GOV 11343.4",
+                    ]
+                )
+            if "clean transportation fund" in text or ("deposit" in text and "fund" in text):
+                hints.append("GOV 16370")
+            if any(term in text for term in ("regional center", "developmental disability", "foster child")):
+                hints.extend(["WIC 4642", "WIC 4643", "WIC 4710"])
+        else:
+            if any(term in text for term in ("housing", "zoning", "recovery", "single-family", "treatment facility")):
+                hints.extend(["42 U.S.C. § 3604", "42 U.S.C. § 12132", "29 U.S.C. § 794"])
+            if any(term in text for term in ("minimum wage", "hourly wage")):
+                hints.extend(["29 U.S.C. § 206", "29 U.S.C. § 218"])
+            if any(term in text for term in ("overtime", "meal period", "rest period", "workweek")):
+                hints.extend(["29 U.S.C. § 207", "29 U.S.C. § 218"])
+        return list(OrderedDict.fromkeys(hints))
+
     def _retrieve_california(self, profile: UploadedBillProfile) -> list[LegalCandidate]:
         prioritized_citations = list(
             OrderedDict.fromkeys(
                 [
+                    *self._domain_hint_citations(profile, source_system="california"),
                     *self._normalized_california_citations(
                         profile.model_copy(update={"explicit_citations": profile.amended_citations})
                     ),
@@ -287,7 +369,14 @@ class LegalRetriever:
             source_system="federal",
             jurisdiction="US",
             lexical_limit=self.settings.uscode_lexical_limit,
-            prioritized_citations=self._normalized_uscode_citations(profile),
+            prioritized_citations=list(
+                OrderedDict.fromkeys(
+                    [
+                        *self._domain_hint_citations(profile, source_system="federal"),
+                        *self._normalized_uscode_citations(profile),
+                    ]
+                )
+            ),
         )
 
     def _retrieve_from_legal_index(
@@ -300,75 +389,207 @@ class LegalRetriever:
         prioritized_citations: list[str],
     ) -> list[LegalCandidate]:
         candidates: dict[tuple[str, str], LegalCandidate] = {}
-        queries = self._query_phrases(profile)
-        for query in queries:
-            sanitized = _sanitize_tsquery(query)
-            if not sanitized:
-                continue
-            rows = self.db.legal_index.fetch_all(
-                """
-                SELECT
-                    document_id,
-                    source_kind,
-                    citation,
-                    COALESCE(heading, citation) AS heading,
-                    COALESCE(hierarchy_path, '') AS hierarchy_path,
-                    source_url,
-                    body_text,
-                    ts_rank_cd(search_text, websearch_to_tsquery('english', %(query)s)) AS rank
-                FROM legal_document_search
-                WHERE source_system = %(source_system)s
-                  AND jurisdiction = %(jurisdiction)s
-                  AND search_text @@ websearch_to_tsquery('english', %(query)s)
-                ORDER BY rank DESC
-                LIMIT %(limit)s
-                """,
-                {
-                    "query": sanitized,
-                    "source_system": source_system,
-                    "jurisdiction": jurisdiction,
-                    "limit": lexical_limit,
-                },
+        for query in self._query_phrases(profile):
+            rows = self._search_text(
+                source_system=source_system,
+                jurisdiction=jurisdiction,
+                query=query,
+                limit=lexical_limit,
             )
             self._merge_candidates(candidates, rows, query, source_system, None)
 
         for overlay in self._risk_overlay_terms(profile):
-            overlay_query = overlay.replace("_", " ")
-            overlay_rows = self.db.legal_index.fetch_all(
-                """
-                SELECT
-                    s.document_id,
-                    s.source_kind,
-                    s.citation,
-                    COALESCE(s.heading, s.citation) AS heading,
-                    COALESCE(s.hierarchy_path, '') AS hierarchy_path,
-                    s.source_url,
-                    s.body_text,
-                    ts_rank_cd(s.profile_search, websearch_to_tsquery('english', %(overlay_query)s)) + 0.35 AS rank
-                FROM legal_semantic_search s
-                WHERE s.source_system = %(source_system)s
-                  AND s.jurisdiction = %(jurisdiction)s
-                  AND (
-                    s.domains ? %(overlay)s
-                    OR s.risk_tags ? %(overlay)s
-                    OR s.profile_search @@ websearch_to_tsquery('english', %(overlay_query)s)
-                  )
-                ORDER BY rank DESC
-                LIMIT %(limit)s
-                """,
-                {
-                    "overlay": overlay,
-                    "overlay_query": overlay_query,
-                    "source_system": source_system,
-                    "jurisdiction": jurisdiction,
-                    "limit": max(12, lexical_limit // 3),
-                },
+            overlay_rows = self._search_overlay(
+                source_system=source_system,
+                jurisdiction=jurisdiction,
+                overlay=overlay,
+                limit=max(12, lexical_limit // 3),
             )
             self._merge_candidates(candidates, overlay_rows, overlay, source_system, None, exact_boost=1.2)
 
         for idx, citation in enumerate(prioritized_citations):
-            exact_rows = self.db.legal_index.fetch_all(
+            exact_rows = self._lookup_citation(
+                source_system=source_system,
+                jurisdiction=jurisdiction,
+                citation=citation,
+            )
+            self._merge_candidates(candidates, exact_rows, citation, source_system, None, exact_boost=2.4 if idx == 0 else 1.8)
+
+            for alias in alias_forms(citation):
+                alias_rows = self._lookup_alias(
+                    source_system=source_system,
+                    jurisdiction=jurisdiction,
+                    alias=alias,
+                )
+                self._merge_candidates(candidates, alias_rows, alias, source_system, None, exact_boost=1.6)
+
+                reference_rows = self._expand_references(
+                    source_system=source_system,
+                    jurisdiction=jurisdiction,
+                    citation=alias,
+                )
+                self._merge_candidates(candidates, reference_rows, alias, source_system, None, exact_boost=1.25)
+
+        return self._finalize_candidates(profile, list(candidates.values()))
+
+    def _search_text(self, *, source_system: str, jurisdiction: str, query: str, limit: int) -> list[dict]:
+        sanitized = _sanitize_tsquery(query)
+        if not sanitized:
+            return []
+        return self.db.legal_index.fetch_all(
+            """
+            SELECT
+                document_id,
+                source_kind,
+                citation,
+                COALESCE(heading, citation) AS heading,
+                COALESCE(hierarchy_path, '') AS hierarchy_path,
+                source_url,
+                body_text,
+                ts_rank_cd(search_text, websearch_to_tsquery('english', %(query)s)) AS rank
+            FROM legal_document_search
+            WHERE source_system = %(source_system)s
+              AND jurisdiction = %(jurisdiction)s
+              AND search_text @@ websearch_to_tsquery('english', %(query)s)
+            ORDER BY rank DESC
+            LIMIT %(limit)s
+            """,
+            {
+                "query": sanitized,
+                "source_system": source_system,
+                "jurisdiction": jurisdiction,
+                "limit": limit,
+            },
+        )
+
+    def _search_overlay(self, *, source_system: str, jurisdiction: str, overlay: str, limit: int) -> list[dict]:
+        overlay_query = overlay.replace("_", " ")
+        return self.db.legal_index.fetch_all(
+            """
+            SELECT
+                s.document_id,
+                s.source_kind,
+                s.citation,
+                COALESCE(s.heading, s.citation) AS heading,
+                COALESCE(s.hierarchy_path, '') AS hierarchy_path,
+                s.source_url,
+                s.body_text,
+                ts_rank_cd(s.profile_search, websearch_to_tsquery('english', %(overlay_query)s)) + 0.35 AS rank
+            FROM legal_semantic_search s
+            WHERE s.source_system = %(source_system)s
+              AND s.jurisdiction = %(jurisdiction)s
+              AND (
+                s.domains ? %(overlay)s
+                OR s.risk_tags ? %(overlay)s
+                OR s.profile_search @@ websearch_to_tsquery('english', %(overlay_query)s)
+              )
+            ORDER BY rank DESC
+            LIMIT %(limit)s
+            """,
+            {
+                "overlay": overlay,
+                "overlay_query": overlay_query,
+                "source_system": source_system,
+                "jurisdiction": jurisdiction,
+                "limit": limit,
+            },
+        )
+
+    def _lookup_citation(self, *, source_system: str, jurisdiction: str, citation: str) -> list[dict]:
+        return self.db.legal_index.fetch_all(
+            """
+            SELECT
+                d.document_id,
+                d.source_kind,
+                d.citation,
+                COALESCE(d.heading, d.citation) AS heading,
+                COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                d.source_url,
+                d.body_text,
+                1.0 AS rank
+            FROM legal_documents d
+            WHERE d.source_system = %(source_system)s
+              AND d.jurisdiction = %(jurisdiction)s
+              AND d.normalized_citation = %(normalized_citation)s
+            LIMIT 20
+            """,
+            {
+                "source_system": source_system,
+                "jurisdiction": jurisdiction,
+                "normalized_citation": normalize_citation(citation),
+            },
+        )
+
+    def _lookup_alias(self, *, source_system: str, jurisdiction: str, alias: str) -> list[dict]:
+        return self.db.legal_index.fetch_all(
+            """
+            SELECT
+                d.document_id,
+                d.source_kind,
+                d.citation,
+                COALESCE(d.heading, d.citation) AS heading,
+                COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                d.source_url,
+                d.body_text,
+                0.9 AS rank
+            FROM legal_aliases a
+            JOIN legal_documents d
+              ON d.document_id = a.document_id
+            WHERE d.source_system = %(source_system)s
+              AND d.jurisdiction = %(jurisdiction)s
+              AND a.normalized_alias = %(normalized_alias)s
+            LIMIT 20
+            """,
+            {
+                "source_system": source_system,
+                "jurisdiction": jurisdiction,
+                "normalized_alias": normalize_citation(alias),
+            },
+        )
+
+    def _expand_references(self, *, source_system: str, jurisdiction: str, citation: str) -> list[dict]:
+        return self.db.legal_index.fetch_all(
+            """
+            SELECT
+                d.document_id,
+                d.source_kind,
+                d.citation,
+                COALESCE(d.heading, d.citation) AS heading,
+                COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                d.source_url,
+                d.body_text,
+                0.7 AS rank
+            FROM legal_references r
+            JOIN legal_documents d
+              ON d.document_id = r.document_id
+            WHERE d.source_system = %(source_system)s
+              AND d.jurisdiction = %(jurisdiction)s
+              AND r.normalized_referenced_citation = %(normalized_alias)s
+            LIMIT 20
+            """,
+            {
+                "source_system": source_system,
+                "jurisdiction": jurisdiction,
+                "normalized_alias": normalize_citation(citation),
+            },
+        )
+
+    def _hierarchy_neighbors(self, *, source_system: str, jurisdiction: str, citation: str, limit: int) -> list[dict]:
+        if source_system == "california":
+            return self.db.legal_index.fetch_all(
                 """
+                WITH target AS (
+                    SELECT
+                        metadata->>'code_abbrev' AS code_abbrev,
+                        metadata->>'division' AS division,
+                        metadata->>'chapter_num' AS chapter_num,
+                        metadata->>'article_num' AS article_num
+                    FROM legal_documents
+                    WHERE source_system = %(source_system)s
+                      AND jurisdiction = %(jurisdiction)s
+                      AND normalized_citation = %(normalized_citation)s
+                    LIMIT 1
+                )
                 SELECT
                     d.document_id,
                     d.source_kind,
@@ -377,80 +598,184 @@ class LegalRetriever:
                     COALESCE(d.hierarchy_path, '') AS hierarchy_path,
                     d.source_url,
                     d.body_text,
-                    1.0 AS rank
+                    0.8 AS rank
                 FROM legal_documents d
+                CROSS JOIN target t
                 WHERE d.source_system = %(source_system)s
                   AND d.jurisdiction = %(jurisdiction)s
-                  AND d.normalized_citation = %(normalized_citation)s
-                LIMIT 20
+                  AND d.metadata->>'code_abbrev' = t.code_abbrev
+                  AND (
+                    (COALESCE(t.chapter_num, '') <> '' AND d.metadata->>'chapter_num' = t.chapter_num)
+                    OR (COALESCE(t.article_num, '') <> '' AND d.metadata->>'article_num' = t.article_num)
+                    OR (COALESCE(t.division, '') <> '' AND d.metadata->>'division' = t.division)
+                  )
+                ORDER BY d.normalized_citation
+                LIMIT %(limit)s
                 """,
                 {
                     "source_system": source_system,
                     "jurisdiction": jurisdiction,
                     "normalized_citation": normalize_citation(citation),
+                    "limit": limit,
                 },
             )
-            self._merge_candidates(candidates, exact_rows, citation, source_system, None, exact_boost=2.4 if idx == 0 else 1.8)
+        return self.db.legal_index.fetch_all(
+            """
+            WITH target AS (
+                SELECT
+                    title_number,
+                    metadata->>'parent_identifier' AS parent_identifier
+                FROM legal_documents
+                WHERE source_system = %(source_system)s
+                  AND jurisdiction = %(jurisdiction)s
+                  AND normalized_citation = %(normalized_citation)s
+                LIMIT 1
+            )
+            SELECT
+                d.document_id,
+                d.source_kind,
+                d.citation,
+                COALESCE(d.heading, d.citation) AS heading,
+                COALESCE(d.hierarchy_path, '') AS hierarchy_path,
+                d.source_url,
+                d.body_text,
+                0.8 AS rank
+            FROM legal_documents d
+            CROSS JOIN target t
+            WHERE d.source_system = %(source_system)s
+              AND d.jurisdiction = %(jurisdiction)s
+              AND d.title_number = t.title_number
+              AND (
+                COALESCE(d.metadata->>'parent_identifier', '') = COALESCE(t.parent_identifier, '')
+                OR d.normalized_citation LIKE split_part(%(normalized_citation)s, ' § ', 1) || '%%'
+              )
+            ORDER BY d.normalized_citation
+            LIMIT %(limit)s
+            """,
+            {
+                "source_system": source_system,
+                "jurisdiction": jurisdiction,
+                "normalized_citation": normalize_citation(citation),
+                "limit": limit,
+            },
+        )
 
-            alias_seen = set()
-            for alias in alias_forms(citation):
-                alias_rows = self.db.legal_index.fetch_all(
-                    """
-                    SELECT
-                        d.document_id,
-                        d.source_kind,
-                        d.citation,
-                        COALESCE(d.heading, d.citation) AS heading,
-                        COALESCE(d.hierarchy_path, '') AS hierarchy_path,
-                        d.source_url,
-                        d.body_text,
-                        0.9 AS rank
-                    FROM legal_aliases a
-                    JOIN legal_documents d
-                      ON d.document_id = a.document_id
-                    WHERE d.source_system = %(source_system)s
-                      AND d.jurisdiction = %(jurisdiction)s
-                      AND a.normalized_alias = %(normalized_alias)s
-                    LIMIT 20
-                    """,
-                    {
-                        "source_system": source_system,
-                        "jurisdiction": jurisdiction,
-                        "normalized_alias": normalize_citation(alias),
-                    },
+    def _agentic_expand(
+        self,
+        profile: UploadedBillProfile,
+        seed_candidates: list[LegalCandidate],
+        *,
+        source_system: str,
+        jurisdiction: str,
+    ) -> list[LegalCandidate]:
+        candidates: dict[tuple[str, str], LegalCandidate] = {
+            (candidate.source_system, candidate.citation): candidate.model_copy(deep=True) for candidate in seed_candidates
+        }
+        history: list[dict] = []
+        for round_index in range(self.settings.agentic_max_rounds):
+            plan = self._plan_agentic_actions(
+                profile=profile,
+                source_system=source_system,
+                current_candidates=list(candidates.values()),
+                history=history,
+            )
+            actions = (plan.get("actions") or [])[: self.settings.agentic_actions_per_round]
+            if plan.get("stop") or not actions:
+                break
+            new_hits = 0
+            round_results: list[dict] = []
+            for action in actions:
+                rows = self._execute_agentic_action(
+                    action=action,
+                    source_system=source_system,
+                    jurisdiction=jurisdiction,
                 )
-                for row in alias_rows:
-                    alias_seen.add(row["citation"])
-                self._merge_candidates(candidates, alias_rows, alias, source_system, None, exact_boost=1.6)
-
-                reference_rows = self.db.legal_index.fetch_all(
-                    """
-                    SELECT
-                        d.document_id,
-                        d.source_kind,
-                        d.citation,
-                        COALESCE(d.heading, d.citation) AS heading,
-                        COALESCE(d.hierarchy_path, '') AS hierarchy_path,
-                        d.source_url,
-                        d.body_text,
-                        0.7 AS rank
-                    FROM legal_references r
-                    JOIN legal_documents d
-                      ON d.document_id = r.document_id
-                    WHERE d.source_system = %(source_system)s
-                      AND d.jurisdiction = %(jurisdiction)s
-                      AND r.normalized_referenced_citation = %(normalized_alias)s
-                    LIMIT 20
-                    """,
+                before = len(candidates)
+                query_label = action.get("query") or action.get("citation") or action.get("overlay") or action.get("tool", "")
+                exact_boost = 1.35 if action.get("tool") in {"citation_lookup", "hierarchy_neighbors"} else 1.15
+                self._merge_candidates(candidates, rows, query_label, source_system, None, exact_boost=exact_boost)
+                added = len(candidates) - before
+                new_hits += max(0, added)
+                round_results.append(
                     {
-                        "source_system": source_system,
-                        "jurisdiction": jurisdiction,
-                        "normalized_alias": normalize_citation(alias),
-                    },
+                        "tool": action.get("tool"),
+                        "query": query_label,
+                        "added_candidates": added,
+                        "top_citations": [row.get("citation") for row in rows[:5]],
+                    }
                 )
-                self._merge_candidates(candidates, reference_rows, alias, source_system, None, exact_boost=1.25)
+            history.append({"round": round_index + 1, "reason": plan.get("reason", ""), "results": round_results})
+            if new_hits == 0:
+                break
+        return list(candidates.values())
 
-        return self._finalize_candidates(profile, list(candidates.values()))
+    def _plan_agentic_actions(
+        self,
+        *,
+        profile: UploadedBillProfile,
+        source_system: str,
+        current_candidates: list[LegalCandidate],
+        history: list[dict],
+    ) -> dict:
+        top_candidates = [
+            {
+                "citation": candidate.citation,
+                "heading": candidate.heading,
+                "hierarchy_path": candidate.hierarchy_path,
+                "matched_queries": candidate.matched_queries[:5],
+                "score": round(candidate.final_score or candidate.lexical_score, 4),
+            }
+            for candidate in sorted(current_candidates, key=lambda item: item.final_score or item.lexical_score, reverse=True)[:10]
+        ]
+        payload = {
+            "source_system": source_system,
+            "action_limit": self.settings.agentic_actions_per_round,
+            "bill_profile": {
+                "title": profile.title,
+                "summary": profile.summary,
+                "policy_domains": profile.policy_domains,
+                "required_actions": profile.required_actions[:10],
+                "permissions_created": profile.permissions_created[:10],
+                "enforcement_mechanisms": profile.enforcement_mechanisms[:8],
+                "explicit_citations": profile.explicit_citations,
+                "amended_citations": profile.amended_citations,
+                "repealed_citations": profile.repealed_citations,
+                "conflict_search_phrases": profile.conflict_search_phrases[:12],
+            },
+            "current_candidates": top_candidates,
+            "history": history,
+            "suggested_overlays": self._risk_overlay_terms(profile),
+        }
+        try:
+            return self.codex.chat_json(
+                system_prompt=AGENTIC_SEARCH_PROMPT,
+                user_prompt=json.dumps(payload, indent=2),
+            )
+        except Exception:
+            return {"stop": True, "reason": "Agentic planning failed.", "actions": []}
+
+    def _execute_agentic_action(self, *, action: dict, source_system: str, jurisdiction: str) -> list[dict]:
+        tool = (action.get("tool") or "").strip()
+        action_source = (action.get("source_system") or source_system).strip().lower()
+        if action_source != source_system:
+            return []
+        limit = max(1, min(self.settings.agentic_action_limit, int(action.get("limit") or self.settings.agentic_action_limit)))
+        if tool == "citation_lookup":
+            citation = action.get("citation") or action.get("query") or ""
+            return self._lookup_citation(source_system=source_system, jurisdiction=jurisdiction, citation=citation)
+        if tool == "text_search":
+            query = action.get("query") or ""
+            return self._search_text(source_system=source_system, jurisdiction=jurisdiction, query=query, limit=limit)
+        if tool == "semantic_overlay":
+            overlay = action.get("overlay") or action.get("query") or ""
+            return self._search_overlay(source_system=source_system, jurisdiction=jurisdiction, overlay=overlay, limit=limit)
+        if tool == "reference_expansion":
+            citation = action.get("citation") or action.get("query") or ""
+            return self._expand_references(source_system=source_system, jurisdiction=jurisdiction, citation=citation)
+        if tool == "hierarchy_neighbors":
+            citation = action.get("citation") or action.get("query") or ""
+            return self._hierarchy_neighbors(source_system=source_system, jurisdiction=jurisdiction, citation=citation, limit=limit)
+        return []
 
     def _merge_candidates(
         self,
@@ -476,7 +801,7 @@ class LegalRetriever:
                 )
             candidate = existing[key]
             candidate.lexical_score += float(row.get("rank") or 0.0) * exact_boost
-            if query not in candidate.matched_queries:
+            if query and query not in candidate.matched_queries:
                 candidate.matched_queries.append(query)
             if (row.get("source_kind") or source_kind) == "provision" and candidate.source_kind != "provision":
                 candidate.source_kind = "provision"

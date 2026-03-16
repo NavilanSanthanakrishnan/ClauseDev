@@ -87,6 +87,10 @@ class Settings:
     llm_input_limit: int = _int_env("LLM_INPUT_LIMIT", 12)
     final_result_limit: int = _int_env("FINAL_RESULT_LIMIT", 10)
     excerpt_char_limit: int = _int_env("EXCERPT_CHAR_LIMIT", 1000)
+    agentic_search_enabled: bool = _bool_env("AGENTIC_SEARCH_ENABLED", True)
+    agentic_max_rounds: int = _int_env("AGENTIC_MAX_ROUNDS", 2)
+    agentic_actions_per_round: int = _int_env("AGENTIC_ACTIONS_PER_ROUND", 4)
+    agentic_action_limit: int = _int_env("AGENTIC_ACTION_LIMIT", 8)
 
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     embedding_device: str = os.getenv("EMBEDDING_DEVICE", "cpu")
