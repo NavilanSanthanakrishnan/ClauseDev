@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Clause Step4</p>
+        <h1>{{ app_name }}</h1>
+        <p class="lede">
+          Upload a bill and Step4 will profile it, retrieve candidate California and federal statutes, and return the
+          statutes that actually conflict.
+        </p>
+      </section>
+
+      <section class="card">
+        <form id="upload-form">
+          <label class="upload-label" for="bill-file">Bill File</label>
+          <input id="bill-file" name="file" type="file" accept=".pdf,.docx,.txt" required />
+          <button id="submit-button" type="submit">Analyze Conflicts</button>
+        </form>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section id="results" class="results hidden">
+        <div class="card">
+          <h2>Bill Profile</h2>
+          <pre id="profile-output" class="json-box"></pre>
+        </div>
+        <div class="card">
+          <h2>Conflicts</h2>
+          <div id="conflicts-output" class="conflicts"></div>
+        </div>
+        <div class="card">
+          <h2>Run Metadata</h2>
+          <pre id="meta-output" class="json-box"></pre>
+        </div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
