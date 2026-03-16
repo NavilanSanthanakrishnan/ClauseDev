@@ -13,6 +13,7 @@ from step4.models import (
 )
 from step4.services.bill_extraction import detect_file_type, extract_text_from_file
 from step4.services.bill_profile import BillProfileExtractor
+from step4.services.california_drafting import CaliforniaDraftingChecker
 from step4.services.codex_client import CodexClient
 from step4.services.database import Database
 from step4.services.legal_retrieval import LegalRetriever
@@ -40,13 +41,13 @@ Do NOT flag mere topic overlap.
 Do NOT flag statutes just because they are in the same subject area.
 
 Expected JSON:
-{
-  "conflicts": [
     {
-      "candidate_id": "",
-      "finding_bucket": "direct_amendment|hard_conflict|federal_preemption|civil_rights_risk|implementation_constraint",
+      "conflicts": [
+        {
+          "candidate_id": "",
+      "finding_bucket": "codification_conflict|direct_amendment|hard_conflict|federal_preemption|civil_rights_risk|implementation_constraint",
       "conflict_type": "state contradiction|federal preemption|permission-versus-prohibition|procedure conflict|threshold conflict|compliance impossibility",
-      "severity": "high|medium|low",
+          "severity": "high|medium|low",
       "confidence": 0.0,
       "bill_excerpt": "",
       "statute_excerpt": "",
@@ -61,6 +62,7 @@ Rules:
 - Only use `candidate_id` values from the provided candidates.
 - Quote or closely reproduce exact bill/statute excerpts from the provided material only.
 - Prefer direct contradictions over broad policy adjacency.
+- Use `codification_conflict` for numbering collisions, chapter-range defects, and similar drafting problems.
 - Use `direct_amendment` when the bill expressly rewrites the cited statute itself.
 - Use `civil_rights_risk` or `implementation_constraint` for softer exposure theories instead of overstating them as hard contradictions.
 - For federal candidates, treat federal floor statutes as conflicting when the bill would authorize conduct below the federal minimum protection or would deem unlawful under federal law to be lawful under state law.
@@ -74,7 +76,7 @@ PAIRWISE_VERIFICATION_PROMPT = """You are verifying one candidate statute agains
 Return ONLY valid JSON:
 {
   "is_conflict": true,
-  "finding_bucket": "direct_amendment|hard_conflict|federal_preemption|civil_rights_risk|implementation_constraint",
+  "finding_bucket": "codification_conflict|direct_amendment|hard_conflict|federal_preemption|civil_rights_risk|implementation_constraint",
   "conflict_type": "",
   "severity": "high|medium|low",
   "confidence": 0.0,
@@ -97,6 +99,7 @@ class ConflictAnalysisService:
         self.db = db
         self.profile_extractor = BillProfileExtractor()
         self.retriever = LegalRetriever(db)
+        self.california_drafting = CaliforniaDraftingChecker(db)
         self.codex = CodexClient()
 
     def analyze(self, *, filename: str, payload: bytes) -> ConflictSearchResult:
@@ -144,7 +147,10 @@ class ConflictAnalysisService:
     ) -> list[ConflictFinding]:
         if not any(candidates.values()):
             warnings.append("No candidate statutes were retrieved.")
-            return []
+            findings = self.california_drafting.find_issues(profile=profile, bill_text=bill_text)
+            if findings:
+                warnings.append("California deterministic drafting/process rules contributed results.")
+            return findings
 
         bill_context = {
             "title": profile.title,
@@ -166,6 +172,10 @@ class ConflictAnalysisService:
         bill_excerpt = bill_text[:12000]
 
         findings: list[ConflictFinding] = []
+        deterministic_findings = self.california_drafting.find_issues(profile=profile, bill_text=bill_text)
+        if deterministic_findings:
+            warnings.append("California deterministic drafting/process rules contributed results.")
+            findings.extend(deterministic_findings)
         for source_system in ("california", "federal"):
             source_candidates = candidates.get(source_system, [])
             if not source_candidates:
@@ -529,6 +539,20 @@ class ConflictAnalysisService:
         ).lower()
         bill_wage_amounts = [float(match) for match in re.findall(r"\$?\s*(\d+(?:\.\d+)?)", permissions_text)]
         bill_floor = min(bill_wage_amounts) if bill_wage_amounts else None
+        minimum_wage_override = "minimum wage" in permissions_text and any(
+            phrase in permissions_text
+            for phrase in (
+                "may pay",
+                "shall pay",
+                "subminimum wage",
+                "payment of a lower wage",
+                "lower wage",
+                "less than the applicable state or local minimum wage",
+                "higher hourly minimum wage",
+                "no state or local agency shall require",
+                "notwithstanding any other law",
+            )
+        )
         findings: list[ConflictFinding] = []
 
         def add(candidate, conflict_type: str, explanation: str, confidence: float) -> None:
@@ -555,7 +579,7 @@ class ConflictAnalysisService:
         for candidate in candidates:
             citation = candidate.citation or ""
             text = (candidate.excerpt or "").lower()
-            if "minimum wage" in permissions_text:
+            if minimum_wage_override:
                 allowed_min_wage = (
                     citation.startswith("LAB 1182.12")
                     or citation.startswith("LAB 1197")
@@ -631,6 +655,19 @@ class ConflictAnalysisService:
         permissions_text = " ".join(
             [*profile.required_actions, *profile.permissions_created, *profile.conflict_search_phrases, *(clause.text for clause in profile.key_clauses)]
         ).lower()
+        minimum_wage_context = "minimum wage" in permissions_text and any(
+            phrase in permissions_text
+            for phrase in (
+                "may pay",
+                "shall pay",
+                "subminimum wage",
+                "lower wage",
+                "hourly minimum wage",
+                "hourly rate",
+                "state or local agency shall require",
+                "notwithstanding any other law",
+            )
+        )
 
         def add_finding(candidate, conflict_type: str, explanation: str, confidence: float) -> None:
             findings.append(
@@ -664,7 +701,11 @@ class ConflictAnalysisService:
                         0.95,
                     )
             elif citation.startswith("29 u.s.c. § 206"):
-                if re.search(r"\$?\s*([0-6](?:\.\d+)?|7(?:\.0|\.00)?)", permissions_text):
+                if minimum_wage_context and (
+                    re.search(r"\$\s*([0-6](?:\.\d+)?|7(?:\.0|\.00)?)", permissions_text)
+                    or "subminimum wage" in permissions_text
+                    or "lower wage" in permissions_text
+                ):
                     add_finding(
                         candidate,
                         "threshold conflict",

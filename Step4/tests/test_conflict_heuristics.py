@@ -184,3 +184,67 @@ def test_postprocess_relabels_civil_rights_federal_findings() -> None:
     filtered = service._postprocess_findings(profile=profile, findings=findings)
 
     assert filtered[0].finding_bucket == "civil_rights_risk"
+
+
+def test_minimum_wage_heuristic_does_not_fire_on_cba_threshold_reference() -> None:
+    service = ConflictAnalysisService.__new__(ConflictAnalysisService)
+    profile = UploadedBillProfile(
+        summary="Meal period exemption bill requiring a collective bargaining agreement with a regular hourly rate at least 30 percent above the state minimum wage.",
+        required_actions=[
+            "The collective bargaining agreement must provide a regular hourly rate of at least 30 percent more than the state minimum wage."
+        ],
+        permissions_created=[
+            "Specified employees may be exempt from meal period requirements if the collective bargaining conditions are satisfied."
+        ],
+        key_clauses=[
+            BillClause(
+                label="meal period exemption",
+                effect="permission",
+                text="The employee remains entitled to premium wage rates for all overtime hours worked under the collective bargaining agreement.",
+            )
+        ],
+    )
+    candidate = LegalCandidate(
+        document_id="29usc218",
+        source_system="federal",
+        source_kind="section",
+        citation="29 U.S.C. § 218",
+        excerpt="No provision of this chapter shall excuse noncompliance with any Federal or State law or municipal ordinance establishing a minimum wage higher than the minimum wage established under this chapter.",
+    )
+
+    findings = service._heuristic_pattern_findings(
+        source_system="federal",
+        profile=profile,
+        candidates=[candidate],
+    )
+
+    assert findings == []
+
+
+def test_federal_minimum_wage_fallback_ignores_hour_counts() -> None:
+    service = ConflictAnalysisService.__new__(ConflictAnalysisService)
+    profile = UploadedBillProfile(
+        required_actions=[
+            "An employer shall not employ an employee for a work period of more than five hours per day without a meal period.",
+            "The collective bargaining agreement must provide a regular hourly rate of at least 30 percent more than the state minimum wage.",
+        ],
+        conflict_search_phrases=["meal periods California utilities"],
+        key_clauses=[
+            BillClause(
+                label="meal period",
+                effect="requirement",
+                text="A second meal period applies after 10 hours unless waived.",
+            )
+        ],
+    )
+    candidate = LegalCandidate(
+        document_id="29usc206",
+        source_system="federal",
+        source_kind="section",
+        citation="29 U.S.C. § 206",
+        excerpt="Every employer shall pay to each of his employees wages at specified minimum rates.",
+    )
+
+    findings = service._heuristic_federal_findings(profile=profile, candidates=[candidate])
+
+    assert findings == []
