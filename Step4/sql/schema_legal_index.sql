@@ -1,8 +1,10 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 DROP VIEW IF EXISTS legal_document_search;
+DROP VIEW IF EXISTS legal_semantic_search;
 DROP TABLE IF EXISTS legal_references;
 DROP TABLE IF EXISTS legal_aliases;
+DROP TABLE IF EXISTS legal_semantic_profiles;
 DROP TABLE IF EXISTS legal_documents;
 
 CREATE TABLE legal_documents (
@@ -61,6 +63,23 @@ CREATE TABLE legal_references (
 CREATE INDEX idx_legal_references_document ON legal_references (document_id);
 CREATE INDEX idx_legal_references_lookup ON legal_references (normalized_referenced_citation);
 
+CREATE TABLE legal_semantic_profiles (
+    document_id TEXT PRIMARY KEY REFERENCES legal_documents(document_id) ON DELETE CASCADE,
+    domains JSONB NOT NULL DEFAULT '[]'::jsonb,
+    risk_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    obligations JSONB NOT NULL DEFAULT '[]'::jsonb,
+    permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    thresholds JSONB NOT NULL DEFAULT '[]'::jsonb,
+    profile_text TEXT NOT NULL,
+    profile_search TSVECTOR GENERATED ALWAYS AS (
+        to_tsvector('english', COALESCE(profile_text, ''))
+    ) STORED
+);
+
+CREATE INDEX idx_legal_semantic_profiles_search ON legal_semantic_profiles USING GIN (profile_search);
+CREATE INDEX idx_legal_semantic_profiles_domains ON legal_semantic_profiles USING GIN (domains);
+CREATE INDEX idx_legal_semantic_profiles_risk_tags ON legal_semantic_profiles USING GIN (risk_tags);
+
 CREATE VIEW legal_document_search AS
 SELECT
     document_id,
@@ -81,3 +100,32 @@ SELECT
     body_text,
     search_text
 FROM legal_documents;
+
+CREATE VIEW legal_semantic_search AS
+SELECT
+    d.document_id,
+    d.source_system,
+    d.source_family,
+    d.source_kind,
+    d.jurisdiction,
+    d.citation,
+    d.normalized_citation,
+    d.title_number,
+    d.title_label,
+    d.heading,
+    d.hierarchy_path,
+    d.source_url,
+    d.effective_date,
+    d.active_flag,
+    d.metadata,
+    d.body_text,
+    p.domains,
+    p.risk_tags,
+    p.obligations,
+    p.permissions,
+    p.thresholds,
+    p.profile_text,
+    p.profile_search
+FROM legal_documents d
+JOIN legal_semantic_profiles p
+  ON p.document_id = d.document_id;

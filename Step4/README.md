@@ -55,6 +55,14 @@ For a lighter initial build that skips U.S. Code provision rows:
 python scripts/build_legal_index.py --skip-provisions
 ```
 
+Then build precached semantic profiles for the canonical index:
+
+```bash
+cd /Users/navilan/Documents/Clause/Step4
+source .venv/bin/activate
+python scripts/build_legal_semantics.py
+```
+
 ## Run
 
 ```bash

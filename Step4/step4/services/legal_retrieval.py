@@ -201,6 +201,28 @@ class LegalRetriever:
         ]
         return list(OrderedDict.fromkeys(ranked))[:14]
 
+    def _risk_overlay_terms(self, profile: UploadedBillProfile) -> list[str]:
+        text = " ".join(
+            [
+                profile.title,
+                profile.summary,
+                *profile.policy_domains,
+                *profile.affected_entities,
+                *profile.conflict_search_phrases,
+                *(clause.text for clause in profile.key_clauses),
+            ]
+        ).lower()
+        overlays: list[str] = []
+        if any(term in text for term in ("zoning", "dwelling", "single-family", "housing", "recovery", "treatment facility")):
+            overlays.extend(["fair_housing", "housing_land_use", "disability_civil_rights", "ada_section504"])
+        if any(term in text for term in ("minimum wage", "hourly wage")):
+            overlays.extend(["minimum_wage_floor", "labor_employment"])
+        if any(term in text for term in ("overtime", "meal period", "rest period", "workweek")):
+            overlays.extend(["overtime_floor", "labor_employment"])
+        if any(term in text for term in ("regional center", "developmental disability", "foster child")):
+            overlays.extend(["child_welfare", "disability_civil_rights"])
+        return list(OrderedDict.fromkeys(overlays))
+
     def _citation_sources(self, profile: UploadedBillProfile) -> list[str]:
         return list(
             OrderedDict.fromkeys(
@@ -309,6 +331,40 @@ class LegalRetriever:
                 },
             )
             self._merge_candidates(candidates, rows, query, source_system, None)
+
+        for overlay in self._risk_overlay_terms(profile):
+            overlay_query = overlay.replace("_", " ")
+            overlay_rows = self.db.legal_index.fetch_all(
+                """
+                SELECT
+                    s.document_id,
+                    s.source_kind,
+                    s.citation,
+                    COALESCE(s.heading, s.citation) AS heading,
+                    COALESCE(s.hierarchy_path, '') AS hierarchy_path,
+                    s.source_url,
+                    s.body_text,
+                    ts_rank_cd(s.profile_search, websearch_to_tsquery('english', %(overlay_query)s)) + 0.35 AS rank
+                FROM legal_semantic_search s
+                WHERE s.source_system = %(source_system)s
+                  AND s.jurisdiction = %(jurisdiction)s
+                  AND (
+                    s.domains ? %(overlay)s
+                    OR s.risk_tags ? %(overlay)s
+                    OR s.profile_search @@ websearch_to_tsquery('english', %(overlay_query)s)
+                  )
+                ORDER BY rank DESC
+                LIMIT %(limit)s
+                """,
+                {
+                    "overlay": overlay,
+                    "overlay_query": overlay_query,
+                    "source_system": source_system,
+                    "jurisdiction": jurisdiction,
+                    "limit": max(12, lexical_limit // 3),
+                },
+            )
+            self._merge_candidates(candidates, overlay_rows, overlay, source_system, None, exact_boost=1.2)
 
         for idx, citation in enumerate(prioritized_citations):
             exact_rows = self.db.legal_index.fetch_all(

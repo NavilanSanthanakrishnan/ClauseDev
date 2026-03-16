@@ -24,10 +24,13 @@ REQUIRED_LEGAL_INDEX_OBJECTS = [
     "legal_documents",
     "legal_aliases",
     "legal_references",
+    "legal_semantic_profiles",
     "legal_document_search",
+    "legal_semantic_search",
     "idx_legal_documents_search",
     "idx_legal_aliases_lookup",
     "idx_legal_references_lookup",
+    "idx_legal_semantic_profiles_search",
 ]
 
 

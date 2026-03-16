@@ -145,7 +145,7 @@ def _reset_index() -> None:
     settings = get_settings()
     with psycopg.connect(settings.legal_index_dsn, autocommit=True) as connection:
         with connection.cursor() as cursor:
-            cursor.execute("TRUNCATE legal_references, legal_aliases, legal_documents")
+            cursor.execute("TRUNCATE legal_semantic_profiles, legal_references, legal_aliases, legal_documents")
 
 
 def _insert_documents(connection: psycopg.Connection, rows: Iterator[dict], *, source: str, batch_size: int) -> tuple[int, int]:
