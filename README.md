@@ -22,7 +22,7 @@ Repository structure:
 - `Step1/README.md`: Step1 setup, run instructions, and architecture
 - `Step1/FUTURE.md`: roadmap for pushing search quality and latency much further
 - `Step2/README.md`: California-code ingestion, official bulk load, and law database instructions
-- `Step4/README.md`: conflict-finder setup, search bootstrap, and run instructions
+- `Step4/README.md`: conflict-finder setup, search bootstrap, official benchmark runner, and run instructions
 
 Next direction:
 
