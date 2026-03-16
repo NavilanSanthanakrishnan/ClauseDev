@@ -8,9 +8,9 @@ import requests
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Smoke test the Step1 similar-bills API.")
+    parser = argparse.ArgumentParser(description="Smoke test the Step1 workflow upload API.")
     parser.add_argument("file", type=Path, help="Path to a PDF, DOCX, or TXT bill file")
-    parser.add_argument("--url", default="http://127.0.0.1:8011/api/search")
+    parser.add_argument("--url", default="http://127.0.0.1:8011/api/workflow/upload")
     args = parser.parse_args()
 
     with args.file.open("rb") as handle:
@@ -18,11 +18,12 @@ def main() -> None:
     response.raise_for_status()
     payload = response.json()
 
-    print(f"Profile title: {payload['profile']['title']}")
-    print(f"Results returned: {len(payload['results'])}")
-    for idx, bill in enumerate(payload["results"][:5], start=1):
-        print(f"{idx}. {bill['identifier']} | {bill['jurisdiction_name']} | score={bill['final_score']}")
-        print(f"   {bill['match_reason']}")
+    print(f"Session id: {payload['session_id']}")
+    print(f"Stage: {payload['current_stage']}")
+    print(f"Status: {payload['status']}")
+    print(f"Draft length: {len(payload['current_draft_text'])}")
+    print(f"Metadata status: {payload['metadata_status']}")
+    print(f"Similarity status: {payload['similarity_status']}")
 
 
 if __name__ == "__main__":

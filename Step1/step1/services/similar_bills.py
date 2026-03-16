@@ -5,6 +5,7 @@ import re
 import time
 from collections import Counter, OrderedDict
 from math import sqrt
+from typing import Any
 
 from step1.config import get_settings
 from step1.models import CandidateBill, LlmRerankResponse, SearchRequestOptions, SearchResult, UploadedBillProfile
@@ -98,6 +99,52 @@ GENERIC_BROAD_BILL_TERMS = (
     "trailer budget",
 )
 
+GENERIC_FOCUS_STOPWORDS = {
+    "act",
+    "agency",
+    "bill",
+    "building",
+    "buildings",
+    "california",
+    "civil",
+    "commission",
+    "compliance",
+    "construction",
+    "enforcement",
+    "facilities",
+    "fund",
+    "infrastructure",
+    "installation",
+    "mandate",
+    "mandatory",
+    "minimum",
+    "new",
+    "penalties",
+    "program",
+    "regulations",
+    "requirements",
+    "rulemaking",
+    "standards",
+    "state",
+    "statewide",
+}
+
+HIGH_SIGNAL_QUERY_TOKENS = {
+    "ev",
+    "electric",
+    "vehicle",
+    "charging",
+    "charger",
+    "chargers",
+    "commercial",
+    "multifamily",
+    "parking",
+    "transportation",
+    "electrification",
+    "level",
+    "fast",
+}
+
 
 def _normalize_text(text: str) -> str:
     text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text or "")
@@ -112,6 +159,7 @@ def _important_tokens(text: str) -> list[str]:
         for token in tokens
         if (
             len(token) >= 3
+            or token == "ev"
             or token in {"dds", "act"}
             or (len(token) == 3 and token.isdigit())
         )
@@ -121,6 +169,13 @@ def _important_tokens(text: str) -> list[str]:
 
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
     return list(OrderedDict.fromkeys(items))
+
+
+def _shorten(text: str, limit: int) -> str:
+    normalized = _normalize_text(text)
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: max(0, limit - 3)].rstrip() + "..."
 
 
 def _extract_uploaded_bill_identifier(bill_text: str) -> str:
@@ -140,9 +195,41 @@ def _extract_uploaded_bill_identifier(bill_text: str) -> str:
     return ""
 
 
+def _profile_focus_terms(profile: UploadedBillProfile) -> list[str]:
+    focus_counter: Counter[str] = Counter()
+    for source in [
+        profile.title,
+        *profile.search_phrases,
+        *profile.legal_mechanisms,
+        *profile.affected_entities,
+        *profile.enforcement_mechanisms,
+    ]:
+        focus_counter.update(
+            token
+            for token in _important_tokens(source)
+            if token not in GENERIC_FOCUS_STOPWORDS
+        )
+    return [token for token, _ in focus_counter.most_common(10)]
+
+
+def _candidate_focus_match_count(candidate: CandidateBill, focus_terms: list[str]) -> int:
+    candidate_text = " ".join(
+        part
+        for part in [
+            candidate.title,
+            candidate.description,
+            candidate.structured_summary,
+            candidate.excerpt,
+        ]
+        if part
+    ).lower()
+    return sum(1 for token in focus_terms if token in candidate_text)
+
+
 class SimilarBillRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
+        self._clauseai_columns: set[str] | None = None
 
     def _preferred_state_code(self, profile: UploadedBillProfile) -> str:
         for hint in profile.jurisdiction_hints:
@@ -180,28 +267,31 @@ class SimilarBillRepository:
             if key not in weighted_queries or weight > weighted_queries[key]:
                 weighted_queries[key] = weight
 
-        signal_tokens = {
-            "lanterman",
-            "regional",
-            "center",
-            "centers",
-            "foster",
-            "child",
-            "children",
-            "developmental",
-            "disability",
-            "services",
-            "assessment",
-            "intake",
-            "eligibility",
-            "denial",
-            "documentation",
-            "reporting",
-            "transparency",
-            "records",
-            "notice",
-            "notices",
+        prioritized_sources = [
+            (profile.title, 18.0),
+            (profile.description, 14.0),
+            (profile.summary, 14.0),
+            (profile.policy_intent, 13.0),
+            *[(phrase, 16.0) for phrase in profile.search_phrases],
+            *[(mechanism, 14.0) for mechanism in profile.legal_mechanisms],
+            *[(entity, 11.0) for entity in profile.affected_entities],
+            *[(mechanism, 11.0) for mechanism in profile.enforcement_mechanisms],
+            *[(domain, 9.0) for domain in profile.policy_domain],
+        ]
+        focus_term_counts: Counter[str] = Counter()
+        for source, _ in prioritized_sources:
+            focus_term_counts.update(_important_tokens(source))
+        focus_terms = {
+            token
+            for token, _ in focus_term_counts.most_common(18)
+            if len(token) >= 4 or any(char.isdigit() for char in token)
         }
+
+        for source, base_weight in prioritized_sources:
+            normalized = _normalize_text(source)
+            tokens = _important_tokens(normalized)
+            if 2 <= len(tokens) <= 10:
+                add_query(" ".join(tokens), base_weight + len(set(tokens)))
 
         for source in normalized_sources:
             tokens = _important_tokens(source)
@@ -214,58 +304,20 @@ class SimilarBillRepository:
                     continue
                 for index in range(0, len(tokens) - size + 1):
                     window = tokens[index : index + size]
-                    if not any(token_counts[token] > 1 for token in window):
+                    if not any(token_counts[token] > 1 for token in window) and not any(
+                        token in HIGH_SIGNAL_QUERY_TOKENS for token in window
+                    ):
                         continue
                     weight = size * 2 + sum(token_counts[token] for token in set(window))
-                    if any(token in signal_tokens for token in window):
-                        weight += 3
-                    if "lanterman" in window:
-                        weight += 4
+                    weight += sum(2 for token in window if token in focus_terms)
+                    weight += sum(1 for token in window if len(token) >= 8 or any(char.isdigit() for char in token))
                     local_queries.append((" ".join(window), weight))
 
             for query, weight in sorted(local_queries, key=lambda item: (-item[1], len(item[0]), item[0]))[:2]:
                 add_query(query, weight)
-            source_queries.append([query for query, _ in sorted(local_queries, key=lambda item: (-item[1], len(item[0]), item[0]))[:4]])
-
-        for anchor in [
-            profile.title,
-            *profile.search_phrases,
-            *profile.legal_mechanisms,
-            *profile.affected_entities,
-        ]:
-            normalized = _normalize_text(anchor)
-            token_count = len(_important_tokens(normalized))
-            if 2 <= token_count <= 5:
-                add_query(normalized, 10 + token_count)
-
-        combined_source_text = " | ".join(normalized_sources).lower()
-        for anchor_phrase in (
-            "regional center",
-            "regional centers",
-            "developmental services",
-            "developmental disability services",
-            "foster child",
-            "foster children",
-            "missing documentation",
-            "public reporting",
-            "eligibility determination",
-            "notices actions",
-            "denials services",
-            "public records",
-            "intake transparency",
-        ):
-            if anchor_phrase in combined_source_text:
-                add_query(anchor_phrase, 18.0)
-        if "lanterman" in combined_source_text and "developmental services" in combined_source_text:
-            add_query("lanterman developmental services", 22.0)
-        if "regional center" in combined_source_text and "assessment" in combined_source_text:
-            add_query("regional center assessment", 20.0)
-        if "regional center" in combined_source_text and "reporting" in combined_source_text:
-            add_query("regional center reporting", 19.0)
-        if "foster child" in combined_source_text and "eligibility" in combined_source_text:
-            add_query("foster child eligibility", 19.0)
-        if "missing documentation" in combined_source_text and "assessment" in combined_source_text:
-            add_query("missing documentation assessment", 19.0)
+            source_queries.append(
+                [query for query, _ in sorted(local_queries, key=lambda item: (-item[1], len(item[0]), item[0]))[:4]]
+            )
 
         ranked = [
             query
@@ -275,26 +327,15 @@ class SimilarBillRepository:
             )
         ]
         selected: list[str] = []
-        covered_signal_tokens: set[str] = set()
-        for token in (
-            "lanterman",
-            "regional",
-            "foster",
-            "developmental",
-            "intake",
-            "assessment",
-            "eligibility",
-            "denial",
-            "documentation",
-            "transparency",
-            "reporting",
-        ):
-            for query in ranked:
-                query_tokens = set(_important_tokens(query))
-                if token in query_tokens and query not in selected:
+        for source, _ in prioritized_sources:
+            normalized = _normalize_text(source)
+            tokens = _important_tokens(normalized)
+            if 2 <= len(tokens) <= 10:
+                query = " ".join(tokens)
+                if query in ranked and query not in selected:
                     selected.append(query)
-                    covered_signal_tokens.update(query_tokens & signal_tokens)
-                    break
+            if len(selected) >= 10:
+                break
 
         for per_source_queries in source_queries:
             for query in per_source_queries:
@@ -612,6 +653,109 @@ class SimilarBillRepository:
             candidate.raw_text = text_map.get(candidate.bill_id, "")
         return candidates
 
+    def enrich_candidates(self, candidates: list[CandidateBill]) -> list[CandidateBill]:
+        if not candidates:
+            return candidates
+        rows = self._clauseai_rows([candidate.bill_id for candidate in candidates])
+        for candidate in candidates:
+            row = rows.get(candidate.bill_id, {})
+            if row.get("full_text_url") and not candidate.primary_bill_url:
+                candidate.primary_bill_url = row["full_text_url"]
+            description = (row.get("description_or_summary") or "").strip()
+            section_headings = self._section_headings(self._structured_payload(row))
+            candidate.description = _shorten(description, 320) if description else ""
+            candidate.structured_summary = self._structured_summary(candidate, description, section_headings)
+            candidate.section_headings = section_headings[:4]
+            if not candidate.excerpt:
+                candidate.excerpt = candidate.description or candidate.structured_summary
+        return candidates
+
+    def _clauseai_rows(self, bill_ids: list[str]) -> dict[str, dict[str, Any]]:
+        columns = self._available_clauseai_columns()
+        if not bill_ids or not columns:
+            return {}
+        selected_columns = [
+            "openstates_bill_id",
+            "description_or_summary",
+            "full_text_url",
+        ]
+        if "clean_json_full_bill_text" in columns:
+            selected_columns.append("clean_json_full_bill_text")
+        rows = self.db.fetch_all(
+            f"""
+            SELECT {", ".join(selected_columns)}
+            FROM public.clauseai_bill_table
+            WHERE openstates_bill_id = ANY(%(bill_ids)s::text[])
+            """,
+            {"bill_ids": bill_ids},
+        )
+        return {row["openstates_bill_id"]: row for row in rows}
+
+    def _available_clauseai_columns(self) -> set[str]:
+        if self._clauseai_columns is not None:
+            return self._clauseai_columns
+        exists_row = self.db.fetch_one("SELECT to_regclass('public.clauseai_bill_table') AS relation_name")
+        if not exists_row or not exists_row.get("relation_name"):
+            self._clauseai_columns = set()
+            return self._clauseai_columns
+        rows = self.db.fetch_all(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'clauseai_bill_table'
+            """
+        )
+        self._clauseai_columns = {row["column_name"] for row in rows}
+        return self._clauseai_columns
+
+    def _structured_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+        payload = row.get("clean_json_full_bill_text")
+        if isinstance(payload, dict):
+            return payload
+        if isinstance(payload, str) and payload.strip():
+            try:
+                parsed = json.loads(payload)
+            except Exception:
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
+
+    def _section_headings(self, payload: dict[str, Any]) -> list[str]:
+        bill = payload.get("bill")
+        if not isinstance(bill, dict):
+            return []
+        sections = bill.get("sections")
+        if not isinstance(sections, list):
+            return []
+        headings: list[str] = []
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            heading = _normalize_text(str(section.get("heading") or ""))
+            label = _normalize_text(str(section.get("label") or ""))
+            if heading:
+                headings.append(heading)
+            elif label:
+                headings.append(f"Section {label}")
+        return _dedupe_preserve_order(headings)
+
+    def _structured_summary(
+        self,
+        candidate: CandidateBill,
+        description: str,
+        section_headings: list[str],
+    ) -> str:
+        parts = []
+        if description:
+            parts.append(_shorten(description, 240))
+        if section_headings:
+            parts.append(f"Key sections: {', '.join(section_headings[:3])}.")
+        if candidate.match_reason:
+            parts.append(candidate.match_reason)
+        return " ".join(part for part in parts if part).strip()
+
 
 class FinalReranker:
     def __init__(self) -> None:
@@ -636,6 +780,9 @@ class FinalReranker:
                     "latest_action_description": candidate.latest_action_description,
                     "subjects": candidate.subjects,
                     "matched_queries": candidate.matched_queries,
+                    "description": candidate.description,
+                    "structured_summary": candidate.structured_summary,
+                    "section_headings": candidate.section_headings,
                     "excerpt": candidate.excerpt[:900],
                 }
                 for candidate in candidates
@@ -674,62 +821,44 @@ class SimilarBillService:
         self.semantic_ranker = SemanticRanker()
         self.final_reranker = FinalReranker()
 
-    def search(self, *, filename: str, payload: bytes, options: SearchRequestOptions | None = None) -> SearchResult:
-        options = options or SearchRequestOptions(final_result_limit=self.settings.final_result_limit)
+    def extract_bill(self, *, filename: str, payload: bytes) -> tuple[str, str]:
         file_type = detect_file_type(filename)
-        timings: dict[str, float] = {}
-        warnings: list[str] = []
-
-        started = time.perf_counter()
         bill_text = extract_text_from_file(file_type, payload)
+        return file_type, bill_text
+
+    def generate_profile(self, bill_text: str) -> UploadedBillProfile:
+        return self.profile_extractor.extract(bill_text)
+
+    def apply_structured_context(self, candidates: list[CandidateBill]) -> list[CandidateBill]:
+        return self.repository.enrich_candidates(candidates)
+
+    def filter_uploaded_bill(self, bill_text: str, candidates: list[CandidateBill]) -> list[CandidateBill]:
         uploaded_identifier = _extract_uploaded_bill_identifier(bill_text)
-        timings["extract"] = round(time.perf_counter() - started, 3)
-
-        started = time.perf_counter()
-        profile = self.profile_extractor.extract(bill_text)
-        timings["profile"] = round(time.perf_counter() - started, 3)
-
-        started = time.perf_counter()
-        lexical_candidates = self.repository.lexical_candidates(profile, options)
-        if uploaded_identifier:
-            preview_text = _normalize_text(bill_text[:4000]).lower()
-            lexical_candidates = [
-                candidate
-                for candidate in lexical_candidates
-                if not (
-                    candidate.identifier.upper() == uploaded_identifier.upper()
-                    and _normalize_text(candidate.title).lower() in preview_text
-                )
-            ]
-        timings["lexical"] = round(time.perf_counter() - started, 3)
-
-        if not lexical_candidates:
-            warnings.append("No lexical candidates were found in the OpenStates corpus.")
-            return SearchResult(
-                filename=filename,
-                file_type=file_type,
-                extracted_text_preview=bill_text[:1500],
-                extracted_text_length=len(bill_text),
-                profile=profile,
-                results=[],
-                timings=timings,
-                warnings=warnings,
+        if not uploaded_identifier:
+            return candidates
+        preview_text = _normalize_text(bill_text[:4000]).lower()
+        return [
+            candidate
+            for candidate in candidates
+            if not (
+                candidate.identifier.upper() == uploaded_identifier.upper()
+                and _normalize_text(candidate.title).lower() in preview_text
             )
+        ]
 
-        semantic_candidates = lexical_candidates[: self.settings.semantic_input_limit]
-        self.repository.hydrate_candidate_texts(semantic_candidates)
-
-        started = time.perf_counter()
-        reranked = self.semantic_ranker.rerank(profile, semantic_candidates)
-        timings["semantic"] = round(time.perf_counter() - started, 3)
-
-        llm_input = reranked[: self.settings.llm_rerank_input_limit]
-        started = time.perf_counter()
-        llm_response = self.final_reranker.rerank(profile, llm_input)
-        timings["llm_rerank"] = round(time.perf_counter() - started, 3)
-
+    def finalize_candidates(
+        self,
+        *,
+        profile: UploadedBillProfile,
+        reranked: list[CandidateBill],
+        llm_response: LlmRerankResponse,
+        result_limit: int,
+    ) -> list[CandidateBill]:
         score_map = {item.candidate_id: item for item in llm_response.top_candidates}
-        final_pool = llm_input if llm_input else reranked
+        final_pool = reranked[: self.settings.llm_rerank_input_limit] if reranked else []
+        if not final_pool:
+            return []
+        focus_terms = _profile_focus_terms(profile)
         for candidate in final_pool:
             llm_item = score_map.get(candidate.bill_id)
             if llm_item:
@@ -741,11 +870,84 @@ class SimilarBillService:
                 candidate.final_score = round(candidate.semantic_score, 4)
                 candidate.match_reason = candidate.match_reason or "Fallback to semantic similarity score."
                 candidate.match_dimensions = candidate.match_dimensions or ["semantic fallback"]
+            focus_match_count = _candidate_focus_match_count(candidate, focus_terms)
+            if focus_terms and focus_match_count == 0:
+                candidate.final_score = round(candidate.final_score * 0.55, 4)
+            elif focus_terms and focus_match_count == 1:
+                candidate.final_score = round(candidate.final_score * 0.78, 4)
+            elif focus_terms and focus_match_count >= 3:
+                candidate.final_score = round(candidate.final_score * 1.05, 4)
+        self.apply_structured_context(final_pool)
+        return sorted(final_pool, key=lambda item: item.final_score, reverse=True)[:result_limit]
 
-        results = sorted(final_pool, key=lambda item: item.final_score, reverse=True)[: options.final_result_limit]
+    def search(self, *, filename: str, payload: bytes, options: SearchRequestOptions | None = None) -> SearchResult:
+        options = options or SearchRequestOptions(final_result_limit=self.settings.final_result_limit)
+        timings: dict[str, float] = {}
+        warnings: list[str] = []
+
+        started = time.perf_counter()
+        file_type, bill_text = self.extract_bill(filename=filename, payload=payload)
+        timings["extract"] = round(time.perf_counter() - started, 3)
+
+        started = time.perf_counter()
+        profile = self.generate_profile(bill_text)
+        timings["profile"] = round(time.perf_counter() - started, 3)
+
+        started = time.perf_counter()
+        lexical_candidates = self.filter_uploaded_bill(
+            bill_text,
+            self.repository.lexical_candidates(profile, options),
+        )
+        timings["lexical"] = round(time.perf_counter() - started, 3)
+
+        if not lexical_candidates:
+            warnings.append("No lexical candidates were found in the OpenStates corpus.")
+            return SearchResult(
+                filename=filename,
+                file_type=file_type,
+                extracted_text=bill_text,
+                extracted_text_preview=bill_text[:1500],
+                extracted_text_length=len(bill_text),
+                profile=profile,
+                results=[],
+                timings=timings,
+                warnings=warnings,
+            )
+
+        focus_terms = _profile_focus_terms(profile)
+        semantic_seed = lexical_candidates[: max(self.settings.semantic_input_limit * 2, 40)]
+        self.repository.hydrate_candidate_texts(semantic_seed)
+        self.apply_structured_context(semantic_seed)
+        focus_filtered = [
+            candidate
+            for candidate in semantic_seed
+            if _candidate_focus_match_count(candidate, focus_terms) >= 2
+        ]
+        semantic_candidates = (
+            focus_filtered[: self.settings.semantic_input_limit]
+            if len(focus_filtered) >= min(8, self.settings.semantic_input_limit // 2)
+            else semantic_seed[: self.settings.semantic_input_limit]
+        )
+
+        started = time.perf_counter()
+        reranked = self.semantic_ranker.rerank(profile, semantic_candidates)
+        timings["semantic"] = round(time.perf_counter() - started, 3)
+
+        llm_input = reranked[: self.settings.llm_rerank_input_limit]
+        started = time.perf_counter()
+        llm_response = self.final_reranker.rerank(profile, llm_input)
+        timings["llm_rerank"] = round(time.perf_counter() - started, 3)
+
+        results = self.finalize_candidates(
+            profile=profile,
+            reranked=reranked,
+            llm_response=llm_response,
+            result_limit=options.final_result_limit,
+        )
         return SearchResult(
             filename=filename,
             file_type=file_type,
+            extracted_text=bill_text,
             extracted_text_preview=bill_text[:1500],
             extracted_text_length=len(bill_text),
             profile=profile,

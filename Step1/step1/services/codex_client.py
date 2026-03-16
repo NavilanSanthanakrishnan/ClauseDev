@@ -10,6 +10,13 @@ from step1.config import get_settings
 from step1.services.codex_auth import CodexAuthError, resolve_codex_runtime_credentials
 
 
+def _responses_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/responses"):
+        return normalized
+    return f"{normalized}/responses"
+
+
 def _iter_sse(response: httpx.Response) -> Iterable[dict[str, Any]]:
     buffer: list[str] = []
     for line in response.iter_lines():
@@ -95,7 +102,7 @@ class CodexClient:
 
         try:
             with httpx.Client(timeout=self.settings.llm_timeout_seconds) as client:
-                with client.stream("POST", f"{self.settings.codex_base_url}/responses", headers=headers, json=body) as response:
+                with client.stream("POST", _responses_url(self.settings.codex_base_url), headers=headers, json=body) as response:
                     if response.status_code != 200:
                         raw = response.read().decode("utf-8", "ignore")
                         raise RuntimeError(f"Codex request failed with status {response.status_code}: {raw}")

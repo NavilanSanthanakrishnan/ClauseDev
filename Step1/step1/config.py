@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 
 APP_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = APP_ROOT.parents[1]
 load_dotenv(APP_ROOT / ".env")
 
 
@@ -35,7 +36,7 @@ def _float_env(name: str, default: float) -> float:
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = os.getenv("APP_NAME", "Step1 Similar Bills")
+    app_name: str = os.getenv("APP_NAME", "ClauseDev Workflow")
     app_host: str = os.getenv("APP_HOST", "127.0.0.1")
     app_port: int = _int_env("APP_PORT", 8011)
     app_reload: bool = _bool_env("APP_RELOAD", False)
@@ -43,7 +44,7 @@ class Settings:
 
     postgres_host: str = os.getenv("POSTGRES_HOST", "127.0.0.1")
     postgres_port: int = _int_env("POSTGRES_PORT", 55432)
-    postgres_db: str = os.getenv("POSTGRES_DB", "openstates_public_compat")
+    postgres_db: str = os.getenv("POSTGRES_DB", "openstates")
     postgres_user: str = os.getenv("POSTGRES_USER", "navilan")
     postgres_password: str = os.getenv("POSTGRES_PASSWORD", "")
     postgres_min_pool_size: int = _int_env("POSTGRES_MIN_POOL_SIZE", 1)
@@ -57,10 +58,16 @@ class Settings:
     llm_timeout_seconds: float = _float_env("LLM_TIMEOUT_SECONDS", 120.0)
     llm_max_output_tokens: int = _int_env("LLM_MAX_OUTPUT_TOKENS", 5000)
     codex_refresh_timeout_seconds: float = _float_env("CODEX_REFRESH_TIMEOUT_SECONDS", 20.0)
+    codex_app_server_host: str = os.getenv("CODEX_APP_SERVER_HOST", "127.0.0.1")
+    codex_app_server_port: int = _int_env("CODEX_APP_SERVER_PORT", 8766)
 
     upload_dir: Path = Path(os.getenv("UPLOAD_DIR", APP_ROOT / "uploads")).expanduser()
+    repo_root: Path = Path(os.getenv("CLAUSEAI_REPO_ROOT", REPO_ROOT)).expanduser()
     max_upload_bytes: int = _int_env("MAX_UPLOAD_BYTES", 20 * 1024 * 1024)
     max_bill_chars_for_llm: int = _int_env("MAX_BILL_CHARS_FOR_LLM", 40000)
+    max_workflow_bill_chars_for_llm: int = _int_env("MAX_WORKFLOW_BILL_CHARS_FOR_LLM", 50000)
+    max_source_bill_chars_for_llm: int = _int_env("MAX_SOURCE_BILL_CHARS_FOR_LLM", 12000)
+    max_source_bills_for_workflow: int = _int_env("MAX_SOURCE_BILLS_FOR_WORKFLOW", 6)
 
     lexical_candidate_limit: int = _int_env("LEXICAL_CANDIDATE_LIMIT", 350)
     semantic_input_limit: int = _int_env("SEMANTIC_INPUT_LIMIT", 220)
@@ -86,6 +93,14 @@ class Settings:
         if self.postgres_password:
             parts.append(f"password={self.postgres_password}")
         return " ".join(parts)
+
+    @property
+    def codex_app_server_ws_url(self) -> str:
+        return f"ws://{self.codex_app_server_host}:{self.codex_app_server_port}"
+
+    @property
+    def codex_app_server_health_url(self) -> str:
+        return f"http://{self.codex_app_server_host}:{self.codex_app_server_port}/readyz"
 
 
 @lru_cache(maxsize=1)

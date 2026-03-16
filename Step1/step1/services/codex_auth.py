@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from base64 import urlsafe_b64decode
 from pathlib import Path
@@ -9,9 +10,10 @@ from typing import Any
 import httpx
 
 
-CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+CODEX_OAUTH_CLIENT_ID = os.getenv("CODEX_OAUTH_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann")
 CODEX_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token"
 CODEX_REFRESH_SKEW_SECONDS = 120
+CODEX_AUTH_CLAIMS_KEY = "https://api.openai.com/auth"
 
 
 class CodexAuthError(RuntimeError):
@@ -41,6 +43,10 @@ def _write_auth_payload(codex_home: str, payload: dict[str, Any]) -> None:
     auth_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _utc_now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def _decode_jwt_claims(token: Any) -> dict[str, Any]:
     if not isinstance(token, str) or token.count(".") < 2:
         return {}
@@ -62,10 +68,33 @@ def _token_is_expiring(access_token: str, skew_seconds: int) -> bool:
     return float(exp) <= (time.time() + max(0, int(skew_seconds)))
 
 
+def _extract_account_id(tokens: dict[str, Any]) -> str:
+    explicit_account_id = str(tokens.get("account_id") or "").strip()
+    if explicit_account_id:
+        return explicit_account_id
+
+    for token_key in ("access_token", "id_token"):
+        claims = _decode_jwt_claims(tokens.get(token_key))
+        auth_claims = claims.get(CODEX_AUTH_CLAIMS_KEY)
+        if isinstance(auth_claims, dict):
+            account_id = str(auth_claims.get("chatgpt_account_id") or auth_claims.get("account_id") or "").strip()
+            if account_id:
+                return account_id
+
+        for claim_key in ("chatgpt_account_id", "account_id"):
+            account_id = str(claims.get(claim_key) or "").strip()
+            if account_id:
+                return account_id
+
+    return ""
+
+
 def _refresh_tokens(tokens: dict[str, str], timeout_seconds: float) -> dict[str, str]:
     refresh_token = str(tokens.get("refresh_token") or "").strip()
     if not refresh_token:
         raise CodexAuthError("Codex auth is missing refresh_token. Run `codex login` again.")
+    if not CODEX_OAUTH_CLIENT_ID or CODEX_OAUTH_CLIENT_ID == "add_here":
+        raise CodexAuthError("Set CODEX_OAUTH_CLIENT_ID before refreshing Codex tokens.")
 
     timeout = httpx.Timeout(max(5.0, float(timeout_seconds)))
     with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}) as client:
@@ -103,6 +132,9 @@ def _refresh_tokens(tokens: dict[str, str], timeout_seconds: float) -> dict[str,
     next_refresh = str(payload.get("refresh_token") or "").strip()
     if next_refresh:
         updated["refresh_token"] = next_refresh
+    account_id = _extract_account_id(updated)
+    if account_id:
+        updated["account_id"] = account_id
     return updated
 
 
@@ -113,28 +145,34 @@ def resolve_codex_runtime_credentials(
     refresh_timeout_seconds: float = 20.0,
 ) -> dict[str, Any]:
     payload = _read_auth_payload(codex_home)
+    auth_mode = str(payload.get("auth_mode") or "").strip().lower()
+    if auth_mode and auth_mode != "chatgpt":
+        raise CodexAuthError(
+            "Step1 requires ChatGPT Codex OAuth credentials. Run `codex login` and choose ChatGPT auth."
+        )
+
     tokens = payload.get("tokens")
     if not isinstance(tokens, dict):
         raise CodexAuthError("Codex auth file is missing the tokens object.")
 
     access_token = str(tokens.get("access_token") or "").strip()
     refresh_token = str(tokens.get("refresh_token") or "").strip()
-    account_id = str(tokens.get("account_id") or "").strip()
+    account_id = _extract_account_id(tokens)
 
     if not access_token:
         raise CodexAuthError("Codex auth file is missing access_token.")
-    if not refresh_token:
-        raise CodexAuthError("Codex auth file is missing refresh_token.")
-    if not account_id:
-        raise CodexAuthError("Codex auth file is missing account_id.")
 
     if refresh_if_expiring and _token_is_expiring(access_token, CODEX_REFRESH_SKEW_SECONDS):
         refreshed = _refresh_tokens(dict(tokens), refresh_timeout_seconds)
         payload["tokens"] = refreshed
+        payload["last_refresh"] = _utc_now_iso()
         _write_auth_payload(codex_home, payload)
         access_token = str(refreshed.get("access_token") or "").strip()
         refresh_token = str(refreshed.get("refresh_token") or refresh_token).strip()
-        account_id = str(refreshed.get("account_id") or account_id).strip()
+        account_id = _extract_account_id(refreshed) or account_id
+
+    if not account_id:
+        raise CodexAuthError("Codex auth file is missing account_id.")
 
     return {
         "access_token": access_token,
@@ -143,4 +181,3 @@ def resolve_codex_runtime_credentials(
         "auth_mode": payload.get("auth_mode"),
         "auth_path": str(_resolve_auth_path(codex_home)),
     }
-

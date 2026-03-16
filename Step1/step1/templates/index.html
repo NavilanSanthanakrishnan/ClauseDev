@@ -4,71 +4,237 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ app_name }}</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v={{ asset_version }}">
 </head>
 <body>
-    <main class="shell">
-        <section class="hero">
-            <p class="eyebrow">Step 1</p>
-            <h1>Upload a bill and pull the strongest similar bills from OpenStates.</h1>
-            <p class="lede">
-                This test interface extracts the uploaded bill, builds a semantic search profile with Codex OAuth,
-                retrieves candidates from the 1.5M-bill corpus, reranks them, and returns the strongest analogs.
-            </p>
-        </section>
+    <main class="app-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">ClauseDev x Codex</p>
+                <h1>Structured bill editing workflow</h1>
+                <p class="lede">Load a bill, generate and edit metadata, stream similar-bill search live, then move into a cleaner Codex loop for draft cleanup, similar-bill adaptation, and Step 5 stakeholder edits.</p>
+            </div>
+            <div class="topbar-note">
+                <span id="session-stage" class="pill neutral">Upload</span>
+                <span id="session-status" class="pill neutral">Idle</span>
+            </div>
+        </header>
 
-        <section class="panel">
-            <form id="upload-form">
-                <label class="upload">
+        <section class="upload-card panel">
+            <form id="upload-form" class="upload-form">
+                <label class="file-field">
                     <span>Bill file</span>
                     <input type="file" id="bill-file" name="file" accept=".pdf,.docx,.txt" required>
                 </label>
-                <button type="submit" id="submit-button">Find Similar Bills</button>
+                <button type="submit" id="submit-button">Load Bill</button>
             </form>
-            <p id="status" class="status idle">Waiting for a bill file.</p>
+            <p id="status" class="status idle">Upload a bill to create a workflow session.</p>
         </section>
 
-        <section id="profile-panel" class="panel hidden">
-            <div class="panel-header">
-                <h2>Extracted Bill Profile</h2>
-            </div>
-            <div class="grid">
-                <article class="card">
-                    <h3>Title</h3>
-                    <p id="profile-title"></p>
+        <section id="workspace" class="workspace hidden">
+            <aside class="rail left-rail">
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Metadata</p>
+                            <h2 id="metadata-title">Bill metadata</h2>
+                        </div>
+                        <a id="download-link" class="secondary-link hidden" href="#">Download draft</a>
+                    </div>
+                    <p id="metadata-status" class="detail-copy">Generate metadata to start the workflow.</p>
+                    <form id="metadata-form" class="meta-form">
+                        <div class="field-grid">
+                            <label class="file-field">
+                                <span>Title</span>
+                                <input type="text" id="metadata-title-input">
+                            </label>
+                            <label class="file-field">
+                                <span>Jurisdiction hints</span>
+                                <input type="text" id="metadata-jurisdictions-input" placeholder="CA, NY, US">
+                            </label>
+                        </div>
+                        <label class="file-field">
+                            <span>Description</span>
+                            <textarea id="metadata-description-input" rows="3"></textarea>
+                        </label>
+                        <label class="file-field">
+                            <span>Summary</span>
+                            <textarea id="metadata-summary-input" rows="4"></textarea>
+                        </label>
+                        <label class="file-field">
+                            <span>Policy intent</span>
+                            <textarea id="metadata-policy-intent-input" rows="3"></textarea>
+                        </label>
+                        <div class="field-grid">
+                            <label class="file-field">
+                                <span>Policy domains</span>
+                                <textarea id="metadata-domains-input" rows="4" placeholder="One per line or comma-separated"></textarea>
+                            </label>
+                            <label class="file-field">
+                                <span>Bill type hints</span>
+                                <textarea id="metadata-bill-types-input" rows="4" placeholder="budget, labor, housing"></textarea>
+                            </label>
+                        </div>
+                        <div class="field-grid">
+                            <label class="file-field">
+                                <span>Legal mechanisms</span>
+                                <textarea id="metadata-mechanisms-input" rows="4"></textarea>
+                            </label>
+                            <label class="file-field">
+                                <span>Affected entities</span>
+                                <textarea id="metadata-entities-input" rows="4"></textarea>
+                            </label>
+                        </div>
+                        <div class="field-grid">
+                            <label class="file-field">
+                                <span>Enforcement mechanisms</span>
+                                <textarea id="metadata-enforcement-input" rows="4"></textarea>
+                            </label>
+                            <label class="file-field">
+                                <span>Fiscal elements</span>
+                                <textarea id="metadata-fiscal-input" rows="4"></textarea>
+                            </label>
+                        </div>
+                        <label class="file-field">
+                            <span>Search phrases</span>
+                            <textarea id="metadata-search-phrases-input" rows="6" placeholder="High-signal retrieval phrases"></textarea>
+                        </label>
+                    </form>
+                    <div class="action-row metadata-actions">
+                        <button type="button" id="generate-metadata-button">Generate metadata</button>
+                        <button type="button" id="save-metadata-button" class="secondary-button">Save metadata</button>
+                        <button type="button" id="start-search-button" class="secondary-button">Find similar bills</button>
+                    </div>
                 </article>
-                <article class="card">
-                    <h3>Description</h3>
-                    <p id="profile-description"></p>
-                </article>
-                <article class="card wide">
-                    <h3>Summary</h3>
-                    <p id="profile-summary"></p>
-                </article>
-                <article class="card">
-                    <h3>Policy Domains</h3>
-                    <div id="profile-domains" class="chips"></div>
-                </article>
-                <article class="card">
-                    <h3>Mechanisms</h3>
-                    <div id="profile-mechanisms" class="chips"></div>
-                </article>
-                <article class="card">
-                    <h3>Search Phrases</h3>
-                    <div id="profile-search-phrases" class="chips"></div>
-                </article>
-            </div>
-        </section>
 
-        <section id="results-panel" class="panel hidden">
-            <div class="panel-header">
-                <h2>Similar Bills</h2>
-                <p id="timings"></p>
-            </div>
-            <div id="results"></div>
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Similar bills</p>
+                            <h2>Live retrieval</h2>
+                        </div>
+                        <p id="timings" class="meta-line"></p>
+                    </div>
+                    <p id="similarity-status" class="detail-copy">Similar-bill search has not started yet.</p>
+                    <div id="results" class="stack"></div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Source bills</p>
+                            <h2>Step 4 context</h2>
+                        </div>
+                    </div>
+                    <div id="source-bills" class="stack"></div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Stakeholder analysis</p>
+                            <h2>Step 5 report</h2>
+                        </div>
+                    </div>
+                    <p id="stakeholder-summary" class="detail-copy">Step 5 has not started yet.</p>
+                    <div class="insight-grid">
+                        <article class="mini-card">
+                            <h3>Affected entities</h3>
+                            <p id="stakeholder-entities" class="detail-copy"></p>
+                        </article>
+                        <article class="mini-card">
+                            <h3>Political viability</h3>
+                            <p id="stakeholder-viability" class="detail-copy"></p>
+                        </article>
+                        <article class="mini-card">
+                            <h3>Implementation</h3>
+                            <p id="stakeholder-feasibility" class="detail-copy"></p>
+                        </article>
+                    </div>
+                    <div class="meta-stack">
+                        <div>
+                            <h3>Optimization focus</h3>
+                            <div id="stakeholder-focus" class="chips"></div>
+                        </div>
+                        <div>
+                            <h3>SME impact test</h3>
+                            <p id="stakeholder-sme" class="detail-copy"></p>
+                        </div>
+                        <div>
+                            <h3>Distribution</h3>
+                            <p id="stakeholder-distribution" class="detail-copy"></p>
+                        </div>
+                        <div>
+                            <h3>Planned improvements</h3>
+                            <div id="stakeholder-improvements" class="stack"></div>
+                        </div>
+                        <div>
+                            <h3>Key actors</h3>
+                            <div id="stakeholder-actors" class="stack"></div>
+                        </div>
+                        <div>
+                            <h3>Evidence</h3>
+                            <div id="stakeholder-sources" class="stack"></div>
+                        </div>
+                    </div>
+                </article>
+            </aside>
+
+            <section class="main-column">
+                <article class="panel bill-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Current draft</p>
+                            <h2 id="draft-meta">Version 1</h2>
+                        </div>
+                        <p id="workflow-message" class="meta-line"></p>
+                    </div>
+                    <pre id="draft-text" class="draft-text"></pre>
+                </article>
+            </section>
+
+            <aside class="rail right-rail">
+                <article id="approval-panel" class="panel hidden">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Review required</p>
+                            <h2>Pending diff</h2>
+                        </div>
+                    </div>
+                    <p id="approval-caption" class="detail-copy">Codex is waiting for you to accept or decline this change.</p>
+                    <pre id="approval-diff" class="diff-text"></pre>
+                    <div class="action-row">
+                        <button type="button" id="approve-button">Approve diff</button>
+                        <button type="button" id="reject-button" class="secondary-button">Reject diff</button>
+                    </div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Steer Codex</p>
+                            <h2>Human feedback</h2>
+                        </div>
+                    </div>
+                    <form id="steer-form" class="steer-form">
+                        <textarea id="steer-input" rows="4" placeholder="Tell Codex to stay narrower, focus on a section, or stop changing something."></textarea>
+                        <button type="submit" id="steer-button" class="secondary-button">Send feedback</button>
+                    </form>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="section-kicker">Live activity</p>
+                            <h2>Codex loop</h2>
+                        </div>
+                    </div>
+                    <p id="live-message" class="live-message"></p>
+                    <div id="event-feed" class="event-feed"></div>
+                </article>
+            </aside>
         </section>
     </main>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v={{ asset_version }}"></script>
 </body>
 </html>
-
