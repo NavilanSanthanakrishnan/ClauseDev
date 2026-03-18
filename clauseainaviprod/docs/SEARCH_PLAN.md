@@ -4,6 +4,7 @@
 Bill lookup must be highly accurate. The interface should support:
 - a standard precise search path
 - a guided or agentic search path
+- a parallel law lookup path for exact statutes and conflict discovery
 
 ## Search Modes
 
@@ -32,6 +33,8 @@ Use when the user asks for intent-driven discovery, such as:
 - similar bills
 - conflicting bills
 - bills with the same policy pattern across states
+- laws that contradict a drafted section
+- laws related to a concept such as wildfire risk or labor retaliation
 
 Execution:
 - parse request into search intent
@@ -44,13 +47,14 @@ Execution:
 - local development store: SQLite
 - current retrieval index: `bill_fts` FTS5 table plus structured indexes
 - local import source: OpenStates Postgres runtime
+- law corpora source: California Code and U.S. Code PostgreSQL databases
 - import modes:
   - `balanced`: a small number of recent bills per jurisdiction for broad coverage
   - `recent`: the latest bills overall when recency matters more than state coverage
 
 ## Current Gap
-- live semantic retrieval is wired but inactive until Gemini API keys are added and vectors are generated
-- current local corpus size controls recall more than the ranking code does
+- bill semantic retrieval depends on vector build progress
+- additional state law corpora still need to be added beyond California
 
 ## Data Source Direction
 - Federal: Congress API as a high-trust official source
