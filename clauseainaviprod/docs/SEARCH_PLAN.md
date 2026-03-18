@@ -21,9 +21,11 @@ Inputs:
 
 Execution:
 - exact identifier and citation matching
-- trigram and full-text ranking
-- semantic expansion
-- reranking
+- inferred jurisdiction and topic filters from the query text
+- lexical ranking through SQLite FTS
+- concept and topic expansion before retrieval
+- optional Gemini embedding boosts when vectors exist
+- deterministic reranking with match reasons
 
 ### 2. Guided Search
 Use when the user asks for intent-driven discovery, such as:
@@ -35,8 +37,20 @@ Execution:
 - parse request into search intent
 - derive filters and evidence targets
 - run retrieval across multiple candidate strategies
-- rerank on evidence density
+- rerank on evidence density and core policy-term alignment
 - return explanation for why each bill matched
+
+## Current Local Data Shape
+- local development store: SQLite
+- current retrieval index: `bill_fts` FTS5 table plus structured indexes
+- local import source: OpenStates Postgres runtime
+- import modes:
+  - `balanced`: a small number of recent bills per jurisdiction for broad coverage
+  - `recent`: the latest bills overall when recency matters more than state coverage
+
+## Current Gap
+- live semantic retrieval is wired but inactive until Gemini API keys are added and vectors are generated
+- current local corpus size controls recall more than the ranking code does
 
 ## Data Source Direction
 - Federal: Congress API as a high-trust official source
@@ -63,4 +77,3 @@ Execution:
   - summary
   - matched reasons
   - source links
-

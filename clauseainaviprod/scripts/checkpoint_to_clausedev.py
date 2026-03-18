@@ -24,6 +24,7 @@ EXCLUDES = {
     "*.pyc",
     "*.pyo",
     "*.log",
+    "*.sqlite3",
     "*.tsbuildinfo",
     "vite.config.js",
     "vite.config.d.ts",

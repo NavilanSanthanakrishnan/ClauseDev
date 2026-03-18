@@ -9,6 +9,9 @@ Reasoning:
 - better cost profile than heavier reasoning models
 - appropriate for query planning, rewrite generation, and result explanation
 
+Official reference:
+- [Gemini API model docs](https://ai.google.dev/gemini-api/docs/models)
+
 ## Why gemini-embedding-001
 
 Use `gemini-embedding-001` for bill and query embeddings.
@@ -18,6 +21,9 @@ Reasoning:
 - supports flexible embedding dimensions
 - intended for retrieval tasks
 
+Official reference:
+- [Gemini embeddings docs](https://ai.google.dev/gemini-api/docs/embeddings)
+
 ## Scalable retrieval direction from Google docs
 
 Google's current search stack guidance points toward:
@@ -25,6 +31,11 @@ Google's current search stack guidance points toward:
 - reranking after retrieval
 - vector indexes for large corpora
 - agentic planning on top of retrieval, not in place of retrieval
+
+Official references:
+- [Vertex AI Search overview](https://cloud.google.com/generative-ai-app-builder/docs/enterprise-search-introduction)
+- [Vertex AI RAG overview](https://cloud.google.com/vertex-ai/generative-ai/docs/rag-overview)
+- [Vertex AI Vector Search overview](https://cloud.google.com/vertex-ai/docs/vector-search/overview)
 
 ## How this maps into Clause
 
@@ -51,4 +62,3 @@ Google's current search stack guidance points toward:
 - hybrid retrieval should happen before the agent loop
 - the agent loop should decide how to search, not hallucinate what exists
 - every result shown to the user should have explicit match reasons
-
