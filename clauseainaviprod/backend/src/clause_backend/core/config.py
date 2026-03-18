@@ -32,6 +32,16 @@ class Settings(BaseSettings):
             "housing": ["tenant", "landlord", "rent", "eviction", "affordability"],
         }
     )
+    concept_expansions: dict[str, list[str]] = Field(
+        default_factory=lambda: {
+            "appointment": ["appointment", "appointments", "nominee", "nomination", "director", "board", "trustee"],
+            "conflict": ["failed", "vetoed", "alternative", "opposition", "competing"],
+            "similar": ["related", "parallel", "peer", "companion"],
+            "education": ["school", "board", "higher education", "teacher", "student"],
+            "director": ["executive director", "administrator", "appointment", "appointed"],
+            "executive": ["executive director", "chief", "director"],
+        }
+    )
 
 
 settings = Settings()

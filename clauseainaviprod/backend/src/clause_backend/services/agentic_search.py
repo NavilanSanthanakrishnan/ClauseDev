@@ -4,11 +4,9 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from clause_backend.core.config import settings
-from clause_backend.repositories import bills
 from clause_backend.schemas import BillListItem, SearchFilters, SearchResponse
 from clause_backend.services.gemini import generate_json, gemini_available
-from clause_backend.services.standard_search import normalize_tokens, search_bills
+from clause_backend.services.standard_search import expand_terms, infer_filters, normalize_tokens, search_bills
 
 
 STATE_BY_NAME = {
@@ -86,18 +84,41 @@ def rerank_agentic(query: str, plan: dict[str, Any], filters: SearchFilters) -> 
     rewrites = [item for item in plan.get("rewrites", []) if isinstance(item, str) and item.strip()]
     if not rewrites:
         rewrites = [query]
+    effective_filters = infer_filters(query, filters)
+    jurisdictions = [item for item in plan.get("jurisdictions", []) if isinstance(item, str)]
+    if not effective_filters.jurisdiction and len(jurisdictions) == 1:
+        effective_filters = effective_filters.model_copy(update={"jurisdiction": jurisdictions[0]})
 
     candidate_scores: dict[str, float] = defaultdict(float)
     candidate_reasons: dict[str, list[str]] = defaultdict(list)
     candidate_items: dict[str, BillListItem] = {}
+    disqualified: set[str] = set()
+    broadened_scope = False
+    rewrite_weights = {rewrite: max(1.0, 1.75 - index * 0.2) for index, rewrite in enumerate(rewrites[:5])}
+    expanded_terms = set(expand_terms(query, effective_filters))
+    jurisdiction_terms = set(normalize_tokens(effective_filters.jurisdiction or ""))
+    required_terms = {term for term in normalize_tokens(query) if term not in jurisdiction_terms}
 
-    for rewrite in rewrites[:5]:
-        standard_response = search_bills(rewrite, filters)
-        for item in standard_response.items:
-            candidate_items[item.bill_id] = item
-            candidate_scores[item.bill_id] += item.relevance_score
-            candidate_reasons[item.bill_id].append(f"Matched rewrite: {rewrite}")
-            candidate_reasons[item.bill_id].extend(item.matched_reasons)
+    def collect(search_filters: SearchFilters) -> None:
+        for rewrite in rewrites[:5]:
+            standard_response = search_bills(rewrite, search_filters)
+            for item in standard_response.items:
+                candidate_items[item.bill_id] = item
+                candidate_scores[item.bill_id] += item.relevance_score * rewrite_weights[rewrite]
+                candidate_reasons[item.bill_id].append(f"Matched rewrite: {rewrite}")
+                candidate_reasons[item.bill_id].extend(item.matched_reasons)
+
+    def best_alignment_depth() -> int:
+        best = 0
+        for item in candidate_items.values():
+            item_tokens = set(normalize_tokens(" ".join([item.title, item.summary, item.identifier])))
+            best = max(best, len(expanded_terms & item_tokens))
+        return best
+
+    collect(effective_filters)
+    if effective_filters.jurisdiction and (not candidate_items or best_alignment_depth() < 2):
+        broadened_scope = True
+        collect(filters)
 
     intent = str(plan.get("intent") or "")
     query_tokens = set(normalize_tokens(query))
@@ -108,15 +129,30 @@ def rerank_agentic(query: str, plan: dict[str, Any], filters: SearchFilters) -> 
         candidate_scores[bill_id] += overlap * 4.0
         if overlap:
             candidate_reasons[bill_id].append(f"{overlap} intent tokens aligned")
+        required_overlap = len(required_terms & item_tokens)
+        if required_overlap:
+            candidate_scores[bill_id] += required_overlap * 10.0
+            candidate_reasons[bill_id].append(f"{required_overlap} core policy terms aligned")
+        elif required_terms:
+            disqualified.add(bill_id)
+            continue
+        expanded_overlap = len(expanded_terms & item_tokens)
+        if expanded_overlap:
+            candidate_scores[bill_id] += expanded_overlap * 3.0
+            candidate_reasons[bill_id].append(f"{expanded_overlap} expanded retrieval signals aligned")
+        if broadened_scope and effective_filters.jurisdiction and item.jurisdiction == effective_filters.jurisdiction and required_overlap < min(2, len(required_terms) or 1):
+            candidate_scores[bill_id] -= 18.0
         if intent == "find-conflicts" and item.outcome.lower() in {"failed", "vetoed"}:
             candidate_scores[bill_id] += 8.0
             candidate_reasons[bill_id].append("Conflict intent boosted contrasting outcome")
-        elif intent == "find-similar" and item.outcome.lower() in {"passed", "enacted"}:
+        elif intent == "find-conflicts" and item.outcome.lower() in {"passed", "enacted"}:
+            candidate_scores[bill_id] -= 4.0
+        elif intent == "find-similar" and item.outcome.lower() in {"passed", "enacted", "active"}:
             candidate_scores[bill_id] += 6.0
             candidate_reasons[bill_id].append("Similarity intent boosted enacted peer")
 
     ranked_items = sorted(
-        candidate_items.values(),
+        [item for item in candidate_items.values() if item.bill_id not in disqualified],
         key=lambda item: candidate_scores[item.bill_id],
         reverse=True,
     )[: filters.limit]
@@ -134,12 +170,14 @@ def rerank_agentic(query: str, plan: dict[str, Any], filters: SearchFilters) -> 
     explanation = "Agentic search planned multiple rewrites, ran repeated retrieval passes, and reranked candidates against the search intent."
     if plan.get("used_gemini"):
         explanation = "Agentic search used Gemini to plan retrieval rewrites, then reranked evidence-backed candidates."
+    if broadened_scope:
+        explanation += " The first pass found no results in the inferred jurisdiction, so the search widened to cross-jurisdiction peers."
 
     return SearchResponse(
         mode="agentic",
         query=query,
         explanation=explanation,
-        plan=plan,
+        plan={**plan, "effective_filters": effective_filters.model_dump(), "broadened_scope": broadened_scope},
         items=response_items,
     )
 
@@ -149,4 +187,3 @@ def agentic_search(query: str, filters: SearchFilters) -> SearchResponse:
     if not plan:
         plan = heuristic_plan(query, filters)
     return rerank_agentic(query, plan, filters)
-
