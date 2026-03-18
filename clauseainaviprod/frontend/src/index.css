@@ -206,6 +206,10 @@ button {
   align-items: flex-start;
 }
 
+.workspace-switch {
+  align-self: flex-start;
+}
+
 .button {
   padding: 15px 22px;
   border-radius: 18px;
@@ -228,6 +232,10 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 14px;
+}
+
+.filter-grid--laws {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .filter-select {
@@ -399,6 +407,13 @@ button {
   color: rgba(244, 241, 234, 0.74);
 }
 
+.detail-inline-path {
+  margin-top: 12px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: rgba(244, 241, 234, 0.58);
+  font-size: 13px;
+}
+
 .detail-header {
   font-family: "Avenir Next", "Segoe UI", sans-serif;
   text-transform: uppercase;
@@ -441,6 +456,11 @@ button {
   padding-left: 18px;
   display: grid;
   gap: 10px;
+}
+
+.detail-link {
+  color: #f4f1ea;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
 }
 
 @media (max-width: 1200px) {

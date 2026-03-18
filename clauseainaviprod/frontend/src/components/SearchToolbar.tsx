@@ -1,16 +1,16 @@
 import { Search } from 'lucide-react';
 
-import type { FilterOptions, SearchFilters, SearchMode } from '../lib/api';
+import type { BillFilterOptions, BillSearchFilters, SearchMode } from '../lib/api';
 
 type SearchToolbarProps = {
   mode: SearchMode;
   query: string;
-  filters: SearchFilters;
-  options: FilterOptions | null;
+  filters: BillSearchFilters;
+  options: BillFilterOptions | null;
   loading: boolean;
   onModeChange: (mode: SearchMode) => void;
   onQueryChange: (value: string) => void;
-  onFilterChange: (key: keyof SearchFilters, value: string) => void;
+  onFilterChange: (key: keyof BillSearchFilters, value: string) => void;
   onSearch: () => void;
 };
 
@@ -92,4 +92,3 @@ export function SearchToolbar({
     </section>
   );
 }
-

@@ -1,8 +1,6 @@
 import {
   BookOpenText,
-  Database,
-  FileSearch,
-  Search,
+  Scale,
   Sparkles,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -11,16 +9,15 @@ type AppShellProps = {
   sidebar: ReactNode;
   main: ReactNode;
   detail: ReactNode;
+  detailTitle?: string;
 };
 
 const navItems = [
-  { label: 'Bills', icon: Database, active: true },
-  { label: 'Search Lab', icon: Search, active: false },
-  { label: 'Briefing', icon: BookOpenText, active: false },
-  { label: 'Artifacts', icon: FileSearch, active: false },
+  { label: 'Bills', icon: BookOpenText, active: true },
+  { label: 'Laws', icon: Scale, active: false },
 ];
 
-export function AppShell({ sidebar, main, detail }: AppShellProps) {
+export function AppShell({ sidebar, main, detail, detailTitle = 'Selected Record' }: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="app-shell__nav">
@@ -55,18 +52,17 @@ export function AppShell({ sidebar, main, detail }: AppShellProps) {
           <div className="nav-footer__title">Mode</div>
           <div className="nav-footer__card">
             <Sparkles size={16} />
-            <span>Bills only</span>
+            <span>Bill + law retrieval</span>
           </div>
         </div>
       </aside>
 
       <main className="app-shell__main">{main}</main>
       <aside className="app-shell__detail">
-        <div className="detail-header">Selected Bill</div>
+        <div className="detail-header">{detailTitle}</div>
         {detail}
       </aside>
       <div className="app-shell__mobile-sidebar">{sidebar}</div>
     </div>
   );
 }
-
