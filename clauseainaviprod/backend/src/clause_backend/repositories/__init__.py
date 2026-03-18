@@ -1,2 +1,1 @@
-__all__ = ["bills"]
-
+__all__ = ["bills", "laws"]

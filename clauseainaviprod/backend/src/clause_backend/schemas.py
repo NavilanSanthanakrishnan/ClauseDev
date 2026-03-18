@@ -61,3 +61,50 @@ class StatsResponse(BaseModel):
     active_sessions: int
     top_topics: list[str]
 
+
+class LawSearchFilters(BaseModel):
+    jurisdiction: str | None = None
+    source: str | None = None
+    sort: SortMode = "relevance"
+    limit: int = Field(default=12, ge=1, le=50)
+
+
+class LawSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=5000)
+    filters: LawSearchFilters = Field(default_factory=LawSearchFilters)
+
+
+class LawListItem(BaseModel):
+    document_id: str
+    citation: str
+    jurisdiction: str
+    source: str
+    heading: str | None = None
+    hierarchy_path: str | None = None
+    body_excerpt: str | None = None
+    source_url: str | None = None
+    matched_reasons: list[str]
+    relevance_score: float
+
+
+class LawSearchResponse(BaseModel):
+    mode: SearchMode
+    query: str
+    explanation: str
+    plan: dict[str, object]
+    items: list[LawListItem]
+
+
+class LawDetail(LawListItem):
+    body_text: str
+
+
+class LawStatsResponse(BaseModel):
+    total_laws: int
+    california_laws: int
+    federal_laws: int
+
+
+class LawFilterOptions(BaseModel):
+    jurisdictions: list[str]
+    sources: list[str]

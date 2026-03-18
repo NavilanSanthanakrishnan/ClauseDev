@@ -4,6 +4,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+PG_RUNTIME = "/Users/navilan/Documents/openstates-data-2026/pg-runtime"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).resolve().parents[5] / ".env.clauseainaviprod"),
@@ -16,12 +19,15 @@ class Settings(BaseSettings):
     database_path: Path = Path(__file__).resolve().parents[4] / "database" / "clause.sqlite3"
     schema_path: Path = Path(__file__).resolve().parents[4] / "database" / "schema.sql"
     seed_path: Path = Path(__file__).resolve().parents[4] / "database" / "seed" / "bills.json"
+    california_code_dsn: str = f"dbname=california_code host={PG_RUNTIME} port=55432"
+    uscode_dsn: str = f"dbname=uscode_local host={PG_RUNTIME} port=55432"
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_timeout_seconds: float = 20.0
     default_limit: int = 12
     max_candidate_pool: int = 60
+    law_candidate_pool: int = 40
     semantic_weight: float = 0.35
     lexical_weight: float = 0.65
     topic_expansions: dict[str, list[str]] = Field(
