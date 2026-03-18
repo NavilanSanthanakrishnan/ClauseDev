@@ -74,6 +74,17 @@ def agentic_law_search(query: str, filters: LawSearchFilters) -> LawSearchRespon
         rewrites = [query]
 
     effective_filters = infer_law_filters(query, filters)
+    plan_filters = plan.get("filters")
+    if isinstance(plan_filters, dict):
+        jurisdiction = plan_filters.get("jurisdiction")
+        source = plan_filters.get("source")
+        updates: dict[str, str] = {}
+        if isinstance(jurisdiction, str) and jurisdiction in {"California", "United States"}:
+            updates["jurisdiction"] = jurisdiction
+        if isinstance(source, str) and source in {"California Code", "United States Code"}:
+            updates["source"] = source
+        if updates:
+            effective_filters = effective_filters.model_copy(update=updates)
     candidate_scores: dict[str, float] = defaultdict(float)
     candidate_reasons: dict[str, list[str]] = defaultdict(list)
     candidate_items: dict[str, LawListItem] = {}

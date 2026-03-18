@@ -55,6 +55,25 @@ def test_agentic_law_search_returns_conflict_candidate(monkeypatch) -> None:
     assert response.mode == "agentic"
 
 
+def test_agentic_law_search_sanitizes_gemini_filters(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clause_backend.services.agentic_law_search.gemini_plan",
+        lambda query, filters: {
+            "intent": "labor retaliation laws",
+            "rewrites": ["labor retaliation laws"],
+            "filters": {"jurisdiction": "California", "source": "statutes"},
+            "used_gemini": True,
+        },
+    )
+    monkeypatch.setattr("clause_backend.repositories.laws.search_california_laws", lambda query, limit: [CA_PRIVACY_LAW])
+    monkeypatch.setattr("clause_backend.repositories.laws.search_uscode_laws", lambda query, limit: [US_WILDFIRE_LAW])
+
+    response = agentic_law_search("Find California laws about labor retaliation", LawSearchFilters(limit=5))
+
+    assert response.plan["effective_filters"]["jurisdiction"] == "California"
+    assert response.plan["effective_filters"]["source"] is None
+
+
 def test_law_api_returns_stats_and_detail(monkeypatch) -> None:
     monkeypatch.setattr(
         "clause_backend.api.law_stats",
