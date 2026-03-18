@@ -1,43 +1,75 @@
-import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { AppShell } from './components/AppShell';
-import { mockBills } from './lib/mock-data';
-
-const filterChips = [
-  'Jurisdiction: All',
-  'Session: Active',
-  'Status: Any',
-  'Topic: Privacy',
-  'Outcome: Passed + Failed',
-  'Sort: Relevance',
-];
+import { BillDetailPanel } from './components/BillDetailPanel';
+import { ResultsList } from './components/ResultsList';
+import { SearchToolbar } from './components/SearchToolbar';
+import { StatsStrip } from './components/StatsStrip';
+import { api, type BillDetail, type FilterOptions, type SearchFilters, type SearchMode, type SearchResponse, type StatsResponse } from './lib/api';
 
 function App() {
+  const [mode, setMode] = useState<SearchMode>('standard');
   const [query, setQuery] = useState('Find bundled payment legislation in Georgia and Alabama');
-  const [selectedId, setSelectedId] = useState(mockBills[0].id);
+  const [filters, setFilters] = useState<SearchFilters>({ sort: 'relevance', limit: 8, topic: '' });
+  const [options, setOptions] = useState<FilterOptions | null>(null);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<BillDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredBills = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return mockBills;
+  useEffect(() => {
+    void Promise.all([api.getFilters(), api.getStats()])
+      .then(([filterOptions, statsResponse]) => {
+        setOptions(filterOptions);
+        setStats(statsResponse);
+      })
+      .catch(() => {
+        setError('Unable to load the backend. Start the Clause API on port 8001.');
+      });
+  }, []);
+
+  async function runSearch(nextMode: SearchMode = mode) {
+    setLoading(true);
+    setError(null);
+    try {
+      const searchResponse = await api.search(nextMode, query, filters);
+      setResponse(searchResponse);
+      const firstBillId = searchResponse.items[0]?.bill_id ?? null;
+      setSelectedBillId(firstBillId);
+      if (firstBillId) {
+        setDetail(await api.getBill(firstBillId));
+      } else {
+        setDetail(null);
+      }
+    } catch {
+      setError('Search request failed. Check that the backend is running and the database initialized correctly.');
+    } finally {
+      setLoading(false);
     }
+  }
 
-    return mockBills.filter((bill) => {
-      const haystack = [
-        bill.id,
-        bill.state,
-        bill.title,
-        bill.summary,
-        bill.excerpt,
-        ...bill.tags,
-      ].join(' ').toLowerCase();
+  useEffect(() => {
+    void runSearch(mode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      return haystack.includes(normalized) || normalized.split(' ').some((token) => haystack.includes(token));
-    });
-  }, [query]);
+  async function handleSelectBill(billId: string) {
+    setSelectedBillId(billId);
+    try {
+      setDetail(await api.getBill(billId));
+    } catch {
+      setError('Failed to load the selected bill.');
+    }
+  }
 
-  const selectedBill = filteredBills.find((bill) => bill.id === selectedId) ?? filteredBills[0] ?? mockBills[0];
+  function handleFilterChange(key: keyof SearchFilters, value: string) {
+    setFilters((current) => ({
+      ...current,
+      [key]: value || undefined,
+    }));
+  }
 
   return (
     <AppShell
@@ -48,102 +80,33 @@ function App() {
             <div>
               <div className="page-kicker">Bills</div>
               <h1>Bill Lookup</h1>
-              <p>Search, compare, and inspect legislative records with a standard mode and a guided search mode.</p>
-            </div>
-            <div className="page-header__actions">
-              <button type="button" className="button button--primary">Normal Search</button>
-              <button type="button" className="button">Guided Search</button>
+              <p>Search, compare, and inspect legislative records with a standard retrieval mode and a Gemini-ready agentic mode.</p>
             </div>
           </header>
 
-          <section className="search-panel">
-            <div className="search-bar">
-              <div className="search-input">
-                <Search size={18} />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search bills, bill numbers, citations, sponsors, or policy intent..."
-                />
-              </div>
-              <button type="button" className="button button--primary">Search</button>
-            </div>
+          <SearchToolbar
+            mode={mode}
+            query={query}
+            filters={filters}
+            options={options}
+            loading={loading}
+            onModeChange={(nextMode) => {
+              setMode(nextMode);
+              void runSearch(nextMode);
+            }}
+            onQueryChange={setQuery}
+            onFilterChange={handleFilterChange}
+            onSearch={() => void runSearch(mode)}
+          />
 
-            <div className="chip-row">
-              {filterChips.map((chip) => (
-                <div key={chip} className="chip">{chip}</div>
-              ))}
-            </div>
-          </section>
-
-          <section className="results-layout">
-            <div className="results-list">
-              <div className="section-header">
-                <div>
-                  <h2>Relevant Bills</h2>
-                  <p>{filteredBills.length} result{filteredBills.length === 1 ? '' : 's'} surfaced by the current retrieval profile.</p>
-                </div>
-                <div className="badge">High relevance</div>
-              </div>
-
-              {filteredBills.map((bill) => (
-                <button
-                  key={bill.id}
-                  type="button"
-                  className={bill.id === selectedBill.id ? 'bill-card bill-card--active' : 'bill-card'}
-                  onClick={() => setSelectedId(bill.id)}
-                >
-                  <div className="bill-card__meta">
-                    <span className="pill pill--strong">{bill.id}</span>
-                    <span className="pill">{bill.state}</span>
-                    <span className="pill">{bill.status}</span>
-                  </div>
-                  <h3>{bill.title}</h3>
-                  <p>{bill.summary}</p>
-                  <blockquote>{bill.excerpt}</blockquote>
-                  <div className="tag-row">
-                    {bill.tags.map((tag) => (
-                      <span key={tag} className="tag">{tag}</span>
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
+          <StatsStrip stats={stats} />
+          {error ? <div className="error-banner">{error}</div> : null}
+          <ResultsList response={response} selectedBillId={selectedBillId} onSelect={(billId) => void handleSelectBill(billId)} />
         </div>
       )}
-      detail={(
-        <div className="detail-panel">
-          <h2>{selectedBill.id}</h2>
-          <div className="detail-subtitle">{selectedBill.title}</div>
-
-          <section className="detail-card">
-            <div className="detail-card__label">Bill context</div>
-            <ul>
-              <li>{selectedBill.state}</li>
-              <li>{selectedBill.committee}</li>
-              <li>{selectedBill.sponsor}</li>
-            </ul>
-          </section>
-
-          <section className="detail-card">
-            <div className="detail-card__label">Why this matched</div>
-            <ul>
-              {selectedBill.whyMatched.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="detail-card">
-            <div className="detail-card__label">Summary</div>
-            <p>{selectedBill.summary}</p>
-          </section>
-        </div>
-      )}
+      detail={<BillDetailPanel detail={detail} />}
     />
   );
 }
 
 export default App;
-

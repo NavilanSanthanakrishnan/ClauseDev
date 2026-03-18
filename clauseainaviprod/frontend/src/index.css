@@ -140,6 +140,31 @@ button {
   gap: 28px;
 }
 
+.error-banner,
+.explanation-banner,
+.empty-state {
+  padding: 16px 18px;
+  border-radius: 18px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.error-banner {
+  background: rgba(144, 46, 46, 0.24);
+  border: 1px solid rgba(221, 95, 95, 0.35);
+  color: #ffd7d7;
+}
+
+.explanation-banner {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: rgba(244, 241, 234, 0.8);
+}
+
+.empty-state {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(244, 241, 234, 0.7);
+}
+
 .page-header,
 .search-panel,
 .bill-card,
@@ -196,6 +221,58 @@ button {
 
 .search-panel {
   padding: 16px;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.filter-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: rgba(244, 241, 234, 0.74);
+}
+
+.filter-select span {
+  font-size: 13px;
+}
+
+.filter-select select {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f1ea;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(23, 23, 24, 0.82);
+}
+
+.stat-card__label {
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: rgba(244, 241, 234, 0.62);
+  font-size: 13px;
+}
+
+.stat-card__value {
+  margin-top: 12px;
+  font-size: 30px;
 }
 
 .search-bar {
@@ -313,14 +390,13 @@ button {
   line-height: 1.6;
 }
 
-.bill-card blockquote {
-  margin: 18px 0;
-  padding: 18px 22px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(244, 241, 234, 0.86);
-  font-style: italic;
-  line-height: 1.6;
+.reason-list {
+  margin: 18px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: rgba(244, 241, 234, 0.74);
 }
 
 .detail-header {
@@ -401,5 +477,9 @@ button {
   .search-bar {
     grid-template-columns: 1fr;
   }
-}
 
+  .filter-grid,
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
