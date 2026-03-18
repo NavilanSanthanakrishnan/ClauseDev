@@ -1,0 +1,405 @@
+:root {
+  color-scheme: dark;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 26%),
+    linear-gradient(180deg, #090909 0%, #0e0e0f 100%);
+  color: #f4f1ea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #090909;
+  color: #f4f1ea;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) 360px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(212, 190, 150, 0.08), transparent 24%),
+    linear-gradient(180deg, #090909 0%, #111111 100%);
+}
+
+.app-shell__nav,
+.app-shell__detail {
+  padding: 24px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 12, 0.92);
+  backdrop-filter: blur(18px);
+}
+
+.app-shell__detail {
+  border-right: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app-shell__main {
+  padding: 32px;
+}
+
+.app-shell__mobile-sidebar {
+  display: none;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 22px;
+}
+
+.brand-title {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.brand-subtitle,
+.page-kicker,
+.section-header p,
+.detail-header,
+.detail-card__label,
+.nav-footer__title,
+.page-header p {
+  color: rgba(244, 241, 234, 0.62);
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(244, 241, 234, 0.72);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-item--active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff7eb;
+}
+
+.nav-footer {
+  margin-top: auto;
+}
+
+.nav-footer__card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.page-header,
+.search-panel,
+.bill-card,
+.detail-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  background: rgba(23, 23, 24, 0.82);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 0 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.page-header h1 {
+  margin: 6px 0 8px;
+  font-size: 54px;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.page-header p {
+  margin: 0;
+  max-width: 760px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.page-header__actions {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.button {
+  padding: 15px 22px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8f3e7;
+  cursor: pointer;
+}
+
+.button--primary {
+  background: #f4f1ea;
+  color: #121212;
+}
+
+.search-panel {
+  padding: 16px;
+}
+
+.search-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.search-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  height: 68px;
+  border-radius: 20px;
+  background: #090909;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.search-input input {
+  flex: 1;
+  background: transparent;
+  color: #f4f1ea;
+  border: 0;
+  outline: none;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 20px;
+}
+
+.chip-row,
+.tag-row,
+.bill-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip-row {
+  margin-top: 14px;
+}
+
+.chip,
+.tag,
+.pill,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.chip,
+.pill,
+.tag {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(244, 241, 234, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pill--strong,
+.badge {
+  background: rgba(244, 241, 234, 0.12);
+  color: #fff6e8;
+}
+
+.results-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.section-header h2 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.bill-card {
+  padding: 18px 18px 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bill-card--active {
+  border-color: rgba(244, 241, 234, 0.24);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(244, 241, 234, 0.08) inset;
+}
+
+.bill-card h3 {
+  margin: 16px 0 10px;
+  font-size: 30px;
+}
+
+.bill-card p,
+.detail-card p,
+.detail-card li {
+  margin: 0;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: rgba(244, 241, 234, 0.78);
+  line-height: 1.6;
+}
+
+.bill-card blockquote {
+  margin: 18px 0;
+  padding: 18px 22px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(244, 241, 234, 0.86);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.detail-header {
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+}
+
+.detail-panel h2 {
+  margin: 0;
+  font-size: 42px;
+}
+
+.detail-subtitle {
+  margin-top: -10px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: rgba(244, 241, 234, 0.74);
+}
+
+.detail-card {
+  padding: 18px 20px;
+}
+
+.detail-card__label {
+  margin-bottom: 14px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detail-card ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  .app-shell__detail {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell__nav {
+    display: none;
+  }
+
+  .app-shell__main {
+    padding: 22px;
+  }
+
+  .page-header {
+    flex-direction: column;
+  }
+
+  .page-header h1 {
+    font-size: 40px;
+  }
+
+  .search-bar {
+    grid-template-columns: 1fr;
+  }
+}
+

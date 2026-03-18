@@ -1,0 +1,47 @@
+{
+  "name": "clauseainaviprod",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Clause desktop bills application scaffold",
+  "author": "Codex",
+  "main": "electron/main/index.cjs",
+  "scripts": {
+    "dev:web": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && uv run clause-api",
+    "dev:electron": "wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron electron/main/index.cjs",
+    "dev:desktop": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
+    "build:web": "npm --prefix frontend run build",
+    "package:mac": "npm run build:web && electron-builder --mac dmg",
+    "package:win": "npm run build:web && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^38.7.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "ai.clause.desktop",
+    "productName": "Clause",
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
+
