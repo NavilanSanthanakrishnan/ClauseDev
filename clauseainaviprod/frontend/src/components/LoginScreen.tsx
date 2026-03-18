@@ -1,10 +1,11 @@
 import {
   BookCopy,
+  Briefcase,
   FileSearch,
   Inbox,
   PenLine,
   Scale,
-  Sparkles,
+  Search,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 
@@ -19,11 +20,13 @@ type LoginScreenProps = {
 };
 
 const navItems = [
+  { label: 'Briefing', icon: Briefcase },
+  { label: 'Smart Search', icon: Search },
   { label: 'Bills', icon: BookCopy },
-  { label: 'Bill Lookup', icon: FileSearch },
-  { label: 'Law Lookup', icon: Scale },
-  { label: 'Workspace Agent', icon: Sparkles },
+  { label: 'Agencies', icon: FileSearch },
+  { label: 'Topic Search', icon: Scale },
   { label: 'Markup', icon: PenLine },
+  { label: 'Artifacts', icon: Inbox },
   { label: 'Inbox', icon: Inbox },
 ];
 
@@ -45,19 +48,17 @@ export function LoginScreen({
     <div className="login-shell">
       <aside className="login-shell__nav">
         <div className="brand-lockup">
-          <div className="brand-mark">C</div>
           <div>
-            <div className="brand-title">Clause</div>
-            <div className="brand-subtitle">Legislative drafting system</div>
+            <div className="brand-title brand-title--login">Clause</div>
           </div>
         </div>
 
         <nav className="nav-list">
-          {navItems.map((item, index) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
 
             return (
-              <div key={item.label} className={index === 0 ? 'nav-item nav-item--active nav-item--static' : 'nav-item nav-item--static'}>
+              <div key={item.label} className={item.label === 'Bills' ? 'nav-item nav-item--active nav-item--static' : 'nav-item nav-item--static'}>
                 <Icon size={16} />
                 <span>{item.label}</span>
               </div>
@@ -65,7 +66,11 @@ export function LoginScreen({
           })}
         </nav>
 
-        <div className="login-shell__footer">Sign in to open search, drafting, and agent workflows.</div>
+        <div className="login-shell__footer">
+          <div className="login-shell__workspace">All Bills</div>
+          <div className="login-shell__settings">Settings</div>
+          <div className="login-shell__signin">Sign in</div>
+        </div>
       </aside>
 
       <main className="login-shell__main">
