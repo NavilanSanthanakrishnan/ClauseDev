@@ -28,6 +28,10 @@ LAW_CONCEPT_EXPANSIONS = {
 }
 
 
+def normalize_citation_text(text: str) -> str:
+    return "".join(character for character in text.upper() if character.isalnum())
+
+
 def law_stats() -> LawStatsResponse:
     return LawStatsResponse(**laws.law_stats())
 
@@ -81,13 +85,27 @@ def _phrase_score(item: dict[str, Any], query: str) -> float:
     heading = (item.get("heading") or "").lower()
     excerpt = (item.get("body_excerpt") or "").lower()
     if lowered_query == citation:
-        return 22.0
+        return 90.0
     if lowered_query in citation:
-        return 16.0
+        return 40.0
     if lowered_query in heading:
         return 12.0
     if lowered_query in excerpt:
         return 8.0
+    return 0.0
+
+
+def _citation_score(item: dict[str, Any], query: str) -> float:
+    normalized_query = normalize_citation_text(query)
+    normalized_citation = normalize_citation_text(item.get("citation", ""))
+    if not normalized_query or not normalized_citation:
+        return 0.0
+    if normalized_query == normalized_citation:
+        return 140.0
+    if normalized_citation.startswith(normalized_query):
+        return 60.0
+    if normalized_query in normalized_citation:
+        return 35.0
     return 0.0
 
 
@@ -131,6 +149,10 @@ def search_laws(query: str, filters: LawSearchFilters) -> LawSearchResponse:
         if phrase_score:
             candidate_scores[document_id] += phrase_score
             candidate_reasons[document_id].append("Direct citation or phrase alignment")
+        citation_score = _citation_score(item, query)
+        if citation_score:
+            candidate_scores[document_id] += citation_score
+            candidate_reasons[document_id].append("Citation normalized exactly")
         if effective_filters.jurisdiction and item["jurisdiction"] == effective_filters.jurisdiction:
             candidate_scores[document_id] += 8.0
             candidate_reasons[document_id].append(f"Jurisdiction matched {effective_filters.jurisdiction}")

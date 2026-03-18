@@ -150,14 +150,22 @@ def search_exact(query: str, limit: int) -> list[dict[str, Any]]:
     with get_connection() as connection:
         rows = connection.execute(
             """
-            select *, 120.0 as exact_score
+            select
+                *,
+                case
+                    when lower(identifier) = lower(?) then 240.0
+                    when lower(title) = lower(?) then 180.0
+                    when lower(summary) = lower(?) then 160.0
+                    else 120.0
+                end as exact_score
             from bills
             where lower(identifier) = lower(?)
                or lower(title) like ?
                or lower(summary) like ?
+            order by exact_score desc, coalesce(latest_action_date, '1970-01-01') desc, identifier
             limit ?
             """,
-            (query, pattern, pattern, limit),
+            (query, query, query, query, pattern, pattern, limit),
         ).fetchall()
     return [hydrate_bill(row, extra={"score": float(row["exact_score"])}) for row in rows]
 
@@ -178,21 +186,24 @@ def search_fts(match_query: str, limit: int, filters: dict[str, str | None]) -> 
     params.append(match_query)
     params.append(limit)
 
-    with get_connection() as connection:
-        rows = connection.execute(
-            f"""
-            select
-                b.*,
-                bm25(bill_fts, 8.0, 6.0, 4.0, 1.5, 1.2, 1.2, 0.8, 1.0) as lexical_rank
-            from bill_fts
-            join bills b on b.bill_id = bill_fts.bill_id
-            {where_sql}
-              and bill_fts match ?
-            order by lexical_rank asc
-            limit ?
-            """.replace("{where_sql}", where_sql if where_sql else "where 1 = 1"),
-            tuple(params),
-        ).fetchall()
+    try:
+        with get_connection() as connection:
+            rows = connection.execute(
+                f"""
+                select
+                    b.*,
+                    bm25(bill_fts, 8.0, 6.0, 4.0, 1.5, 1.2, 1.2, 0.8, 1.0) as lexical_rank
+                from bill_fts
+                join bills b on b.bill_id = bill_fts.bill_id
+                {where_sql}
+                  and bill_fts match ?
+                order by lexical_rank asc
+                limit ?
+                """.replace("{where_sql}", where_sql if where_sql else "where 1 = 1"),
+                tuple(params),
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return []
 
     items: list[dict[str, Any]] = []
     for row in rows:

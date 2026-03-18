@@ -5,23 +5,36 @@ from fastapi.testclient import TestClient
 from clause_backend.main import create_app
 from clause_backend.schemas import SearchFilters
 from clause_backend.services.agentic_search import agentic_search
-from clause_backend.services.standard_search import search_bills
+from clause_backend.services.standard_search import infer_filters, search_bills
 
 
-def test_standard_search_infers_filters_for_jurisdiction_and_topic(test_database: None) -> None:
+def test_standard_search_infers_jurisdiction_without_hardcoded_topic_expansion(test_database: None) -> None:
     response = search_bills("fluoride water in Tennessee", SearchFilters(limit=3))
 
     assert response.plan["effective_filters"]["jurisdiction"] == "Tennessee"
     assert response.items
     assert response.items[0].bill_id == "tn-fluoride-1"
-    assert any("Jurisdiction matched Tennessee" in reason for reason in response.items[0].matched_reasons)
+
+
+def test_standard_search_prefers_longer_jurisdiction_match() -> None:
+    response = infer_filters("department health rules in West Virginia", SearchFilters(limit=5))
+
+    assert response.jurisdiction == "West Virginia"
 
 
 def test_standard_search_recent_sort_prefers_newer_match(test_database: None) -> None:
     response = search_bills("data broker privacy", SearchFilters(limit=2, sort="recent"))
 
     assert [item.bill_id for item in response.items[:2]] == ["wa-privacy-new", "tn-privacy-old"]
-    assert response.plan["effective_filters"]["topic"] == "privacy"
+    assert response.plan["effective_filters"]["topic"] is None
+
+
+def test_standard_search_exact_identifier_beats_generic_prefix_matches(test_database: None) -> None:
+    response = search_bills("HB 2200", SearchFilters(limit=3))
+
+    assert response.items
+    assert response.items[0].bill_id == "wa-privacy-new"
+    assert response.plan["identifier_query"] is True
 
 
 def test_agentic_search_broadens_scope_when_state_has_no_hits(test_database: None) -> None:
@@ -71,3 +84,10 @@ def test_bill_detail_route_accepts_slashes_in_bill_ids(monkeypatch) -> None:
 
     assert detail.status_code == 200
     assert detail.json()["bill_id"] == "ocd-bill/abc123"
+
+
+def test_standard_search_handles_hyphenated_identifier_query(test_database: None) -> None:
+    response = search_bills("HB-2200", SearchFilters(limit=3))
+
+    assert response.items
+    assert response.items[0].bill_id == "wa-privacy-new"

@@ -13,6 +13,10 @@ LAW_SOURCES = ("California Code", "United States Code")
 LAW_JURISDICTIONS = ("California", "United States")
 
 
+def _looks_like_citation(query_text: str) -> bool:
+    return any(character.isdigit() for character in query_text) and any(character.isalpha() for character in query_text)
+
+
 @contextmanager
 def _connect(dsn: str) -> Iterator[psycopg.Connection[Any]]:
     connection = psycopg.connect(dsn, row_factory=dict_row)
@@ -88,6 +92,8 @@ def search_california_laws(query_text: str, limit: int) -> list[dict[str, Any]]:
         """,
         (f"%{query_text}%", min(limit, 10)),
     )
+    if exact_hits and _looks_like_citation(query_text):
+        return exact_hits[:limit]
     text_hits = _safe_query(
         settings.california_code_dsn,
         """
@@ -136,6 +142,8 @@ def search_uscode_laws(query_text: str, limit: int) -> list[dict[str, Any]]:
         """,
         (f"%{query_text}%", f"%{query_text}%", min(limit, 10)),
     )
+    if exact_hits and _looks_like_citation(query_text):
+        return exact_hits[:limit]
     text_hits = _safe_query(
         settings.uscode_dsn,
         """
