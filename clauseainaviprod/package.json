@@ -11,10 +11,14 @@
     "dev:electron": "wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron electron/main/index.cjs",
     "dev:desktop": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
     "build:web": "npm --prefix frontend run build",
+    "qa:generate-cases": "cd backend && uv run python ../scripts/generate_accuracy_cases.py",
+    "qa:playwright": "playwright test",
+    "qa:accuracy": "npm run qa:generate-cases && npm run qa:playwright",
     "package:mac": "npm run build:web && electron-builder --mac dmg",
     "package:win": "npm run build:web && electron-builder --win nsis"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^38.7.0",
@@ -44,4 +48,3 @@
     }
   }
 }
-

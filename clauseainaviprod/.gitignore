@@ -8,9 +8,7 @@ node_modules/
 dist/
 build/
 release/
-*.tsbuildinfo
-*.d.ts
-vite.config.js
+artifacts/qa/
 playwright-report/
 test-results/
 coverage/
@@ -21,3 +19,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.log
+*.tsbuildinfo
+*.d.ts
+vite.config.js
