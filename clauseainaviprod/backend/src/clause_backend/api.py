@@ -81,7 +81,7 @@ def laws_filters(_: dict[str, object] = Depends(current_user)) -> LawFilterOptio
     return law_filter_options()
 
 
-@router.get("/bills/{bill_id}", response_model=BillDetail)
+@router.get("/bills/{bill_id:path}", response_model=BillDetail)
 def bill_detail(bill_id: str, _: dict[str, object] = Depends(current_user)) -> BillDetail:
     item = get_bill(bill_id)
     if not item:

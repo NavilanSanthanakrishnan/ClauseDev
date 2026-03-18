@@ -49,39 +49,49 @@ def generate_json(prompt: str) -> dict[str, Any] | None:
     if not gemini_available():
         return None
 
-    response = _post_with_retry(
-        settings.gemini_model,
-        "generateContent",
-        {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.2,
-                "responseMimeType": "application/json",
+    try:
+        response = _post_with_retry(
+            settings.gemini_model,
+            "generateContent",
+            {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "responseMimeType": "application/json",
+                },
             },
-        },
-    )
-    payload = response.json()
-    parts = payload["candidates"][0]["content"]["parts"]
-    text = "".join(part.get("text", "") for part in parts)
+        )
+        payload = response.json()
+        parts = payload["candidates"][0]["content"]["parts"]
+        text = "".join(part.get("text", "") for part in parts)
+    except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError):
+        return None
+
     if not text.strip():
         return None
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
 
 
 def embed_text(text: str) -> list[float] | None:
     if not gemini_available():
         return None
 
-    response = _post_with_retry(
-        settings.gemini_embedding_model,
-        "embedContent",
-        {
-            "model": f"models/{settings.gemini_embedding_model}",
-            "content": {"parts": [{"text": text}]},
-            "taskType": "RETRIEVAL_QUERY",
-        },
-    )
-    payload = response.json()
+    try:
+        response = _post_with_retry(
+            settings.gemini_embedding_model,
+            "embedContent",
+            {
+                "model": f"models/{settings.gemini_embedding_model}",
+                "content": {"parts": [{"text": text}]},
+                "taskType": "RETRIEVAL_QUERY",
+            },
+        )
+        payload = response.json()
+    except (httpx.HTTPError, json.JSONDecodeError):
+        return None
     return payload.get("embedding", {}).get("values")
 
 

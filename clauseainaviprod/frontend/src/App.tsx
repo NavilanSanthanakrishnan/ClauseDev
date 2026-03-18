@@ -33,6 +33,7 @@ import {
 } from './lib/api';
 
 const TOKEN_STORAGE_KEY = 'clause.token';
+const VALID_ROUTES: RouteKey[] = ['home', 'bill-lookup', 'law-lookup', 'workspace'];
 
 type ProjectDraft = {
   title: string;
@@ -82,6 +83,14 @@ function formatRelativeDate(value: string | undefined) {
   }).format(date);
 }
 
+function truncate(value: unknown, maxLength = 92) {
+  const text = String(value ?? '').trim();
+  if (text.length <= maxLength) {
+    return text || 'Untitled';
+  }
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+
 function buildProjectFromBill(detail: BillDetail): CreateProjectInput {
   return {
     title: detail.title,
@@ -90,8 +99,14 @@ function buildProjectFromBill(detail: BillDetail): CreateProjectInput {
   };
 }
 
+function initialRoute(): RouteKey {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get('view');
+  return VALID_ROUTES.includes(view as RouteKey) ? (view as RouteKey) : 'home';
+}
+
 function App() {
-  const [route, setRoute] = useState<RouteKey>('home');
+  const [route, setRoute] = useState<RouteKey>(() => initialRoute());
   const [authEnabled, setAuthEnabled] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
@@ -126,6 +141,7 @@ function App() {
   const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
   const [projectLoading, setProjectLoading] = useState(false);
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const [autoInsightProjectId, setAutoInsightProjectId] = useState<string | null>(null);
   const [agentPrompt, setAgentPrompt] = useState('Find the main drafting risks and give me the next revision to make.');
   const [agentResult, setAgentResult] = useState<AgentResponse | null>(null);
   const [draft, setDraft] = useState<ProjectDraft | null>(null);
@@ -187,6 +203,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    if (route === 'home') {
+      url.searchParams.delete('view');
+    } else {
+      url.searchParams.set('view', route);
+    }
+    window.history.replaceState({}, '', url);
+  }, [route]);
+
+  useEffect(() => {
     if (!selectedProjectId || !user) {
       return;
     }
@@ -216,6 +242,20 @@ function App() {
       cancelled = true;
     };
   }, [selectedProjectId, token, user]);
+
+  useEffect(() => {
+    if (
+      route !== 'workspace'
+      || !projectDetail
+      || Object.keys(projectDetail.insights).length > 0
+      || autoInsightProjectId === projectDetail.project_id
+    ) {
+      return;
+    }
+
+    setAutoInsightProjectId(projectDetail.project_id);
+    void refreshInsights();
+  }, [autoInsightProjectId, projectDetail, route]);
 
   async function handleLogin() {
     setAuthBusy(true);
@@ -247,10 +287,11 @@ function App() {
     setError(null);
     try {
       const response = await api.searchBills(nextMode, billQuery, billFilters, token);
-      setBillResponse(response);
       const firstBillId = response.items[0]?.bill_id ?? null;
+      const nextDetail = firstBillId ? await api.getBill(firstBillId, token) : null;
+      setBillResponse(response);
       setSelectedBillId(firstBillId);
-      setBillDetail(firstBillId ? await api.getBill(firstBillId, token) : null);
+      setBillDetail(nextDetail);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Bill search failed.');
     } finally {
@@ -263,10 +304,11 @@ function App() {
     setError(null);
     try {
       const response = await api.searchLaws(nextMode, lawQuery, lawFilters, token);
-      setLawResponse(response);
       const firstLawId = response.items[0]?.document_id ?? null;
+      const nextDetail = firstLawId ? await api.getLaw(firstLawId, token) : null;
+      setLawResponse(response);
       setSelectedLawId(firstLawId);
-      setLawDetail(firstLawId ? await api.getLaw(firstLawId, token) : null);
+      setLawDetail(nextDetail);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Law search failed.');
     } finally {
@@ -806,7 +848,7 @@ function App() {
           {similarBills.length ? (
             similarBills.slice(0, 3).map((item) => (
               <li key={String(item.bill_id)}>
-                <strong>{String(item.identifier)}</strong> {String(item.title)}
+                <strong>{String(item.identifier)}</strong> {truncate(item.title)}
               </li>
             ))
           ) : (
@@ -821,7 +863,7 @@ function App() {
           {conflictingLaws.length ? (
             conflictingLaws.slice(0, 3).map((item) => (
               <li key={String(item.document_id)}>
-                <strong>{String(item.citation)}</strong> {String(item.heading ?? item.source)}
+                <strong>{String(item.citation)}</strong> {truncate(item.heading ?? item.source)}
               </li>
             ))
           ) : (

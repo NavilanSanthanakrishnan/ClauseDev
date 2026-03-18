@@ -42,3 +42,32 @@ def test_api_serves_stats_and_bill_detail(test_database: None) -> None:
     assert stats.json()["total_bills"] == 4
     assert detail.status_code == 200
     assert detail.json()["identifier"] == "HB 1004"
+
+
+def test_bill_detail_route_accepts_slashes_in_bill_ids(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clause_backend.api.get_bill",
+        lambda bill_id: {
+            "bill_id": bill_id,
+            "identifier": "HB 1",
+            "jurisdiction": "Test",
+            "state_code": "TS",
+            "title": "Test Bill",
+            "summary": "Summary",
+            "status": "Filed",
+            "outcome": "Active",
+            "sponsor": "Rep. Test",
+            "committee": "Committee",
+            "session_name": "2026",
+            "source_url": None,
+            "topics": ["test"],
+            "full_text": "Full text",
+            "latest_action_date": None,
+        },
+    )
+
+    with TestClient(create_app()) as client:
+        detail = client.get("/api/bills/ocd-bill%2Fabc123")
+
+    assert detail.status_code == 200
+    assert detail.json()["bill_id"] == "ocd-bill/abc123"

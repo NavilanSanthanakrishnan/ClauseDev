@@ -91,6 +91,9 @@ TEST_RECORDS = [
 @pytest.fixture(autouse=True)
 def disable_live_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "gemini_api_key", None)
+    monkeypatch.setattr(settings, "auth_enabled", False)
+    monkeypatch.setattr(settings, "auth_dummy_email", "demo@clause.local")
+    monkeypatch.setattr(settings, "auth_dummy_password", "Passw0rd!Passw0rd!")
 
 
 @pytest.fixture()

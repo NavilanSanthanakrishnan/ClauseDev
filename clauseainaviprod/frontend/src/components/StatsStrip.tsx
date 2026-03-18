@@ -9,7 +9,7 @@ export function StatsStrip({ stats }: StatsStripProps) {
     { label: 'Bills Indexed', value: stats ? stats.total_bills.toLocaleString() : '—' },
     { label: 'Jurisdictions', value: stats ? String(stats.jurisdictions) : '—' },
     { label: 'Active Sessions', value: stats ? String(stats.active_sessions) : '—' },
-    { label: 'Top Topics', value: stats ? stats.top_topics.slice(0, 3).join(', ') : '—' },
+    { label: 'Retrieval', value: 'Hybrid + agentic' },
   ];
 
   return (
@@ -23,4 +23,3 @@ export function StatsStrip({ stats }: StatsStripProps) {
     </section>
   );
 }
-
