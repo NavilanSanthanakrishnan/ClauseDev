@@ -1,0 +1,38 @@
+[project]
+name = "clauseai-backend"
+version = "0.1.0"
+description = "ClauseAIProd backend"
+authors = [{ name = "Shrey Vishen" }]
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18.4",
+    "email-validator>=2.3.0",
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "orjson>=3.11.7",
+    "pypdf>=6.1.1",
+    "psycopg[binary]>=3.3.3",
+    "pwdlib[argon2]>=0.3.0",
+    "pydantic-settings>=2.13.1",
+    "pyjwt>=2.12.1",
+    "python-docx>=1.2.0",
+    "python-multipart>=0.0.22",
+    "sqlalchemy>=2.0.48",
+    "uvicorn[standard]>=0.42.0",
+    "websockets>=15.0.1",
+]
+
+[project.scripts]
+clauseai-api = "clauseai_backend.main:main"
+clauseai-bootstrap-user-db = "clauseai_backend.bootstrap_user_db:main"
+
+[build-system]
+requires = ["uv_build>=0.9.8,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.6",
+]

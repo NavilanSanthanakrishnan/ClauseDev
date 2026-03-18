@@ -1,32 +1,26 @@
-# macOS
 .DS_Store
-
-# Python
-__pycache__/
-*.py[cod]
-*.so
+.vscode/
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+node_modules/
+dist/
+build/
+release/
+playwright-report/
+test-results/
+coverage/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-coverage.xml
-htmlcov/
-
-# Local runtime
-**/.env
-**/.venv/
-**/uploads/
-**/benchmarks/results/
-**/*.db
-**/*.sqlite
-**/*.sqlite3
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.sqlite
+*.sqlite3
 *.log
-Step2/CaliforniaCodeData/
-Step2/data/
-Step2/cache/
-Step2/uscode/uscode_local.db
-Step2/uscode/xml_uscAll_current.zip
-
-# Editors
-.idea/
-.vscode/
+backend/data/storage/
+data/

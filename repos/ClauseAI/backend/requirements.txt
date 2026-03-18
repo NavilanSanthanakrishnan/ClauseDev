@@ -1,0 +1,33 @@
+# FastAPI and web framework
+fastapi
+uvicorn
+python-multipart
+pydantic
+
+# LLM and AI
+openai
+transformers
+sentence-transformers
+torch
+
+# NLP and text processing
+nltk
+rapidfuzz
+scikit-learn
+
+# Document processing
+pypdf
+python-docx
+beautifulsoup4
+
+# Web scraping
+playwright
+ddgs
+
+# Utilities
+python-dotenv
+numpy
+requests
+repo-to-md
+supabase
+PyJWT[crypto]

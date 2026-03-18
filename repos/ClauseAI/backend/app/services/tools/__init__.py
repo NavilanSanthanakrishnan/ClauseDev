@@ -1,0 +1,2 @@
+from .california_code_tools import query_master_json, multi_query_master_json
+from .web_search_tools import web_search_ddg, multi_web_search_ddg

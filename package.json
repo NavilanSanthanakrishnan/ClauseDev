@@ -1,0 +1,47 @@
+{
+  "name": "clauseaiprod",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ClauseAIProd desktop and web application",
+  "author": "Shrey Vishen",
+  "main": "electron/main/index.cjs",
+  "scripts": {
+    "dev:web": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && uv run clauseai-api",
+    "dev:electron": "wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron electron/main/index.cjs",
+    "dev:desktop": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
+    "build:web": "npm --prefix frontend run build",
+    "package:mac": "npm run build:web && electron-builder --mac dmg",
+    "package:win": "npm run build:web && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^38.7.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "ai.clause.prod",
+    "productName": "ClauseAIProd",
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
