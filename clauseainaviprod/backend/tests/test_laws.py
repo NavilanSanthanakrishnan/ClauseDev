@@ -108,3 +108,28 @@ def test_law_api_returns_stats_and_detail(monkeypatch) -> None:
     assert stats.json()["total_laws"] == 2
     assert detail.status_code == 200
     assert detail.json()["citation"] == "CIV 1798.99.31"
+
+
+def test_law_detail_route_accepts_slashes_in_document_ids(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clause_backend.api.get_law_detail",
+        lambda document_id: {
+            "document_id": document_id,
+            "citation": "16 U.S.C. § 6592",
+            "jurisdiction": "United States",
+            "source": "United States Code",
+            "heading": "Wildfire law",
+            "hierarchy_path": "Title 16",
+            "body_excerpt": "excerpt",
+            "source_url": "https://example.com/uscode",
+            "matched_reasons": [],
+            "relevance_score": 0.0,
+            "body_text": "full body",
+        },
+    )
+
+    with TestClient(create_app()) as client:
+        detail = client.get("/api/laws/uscode%3A/us/usc/t16/s6592")
+
+    assert detail.status_code == 200
+    assert detail.json()["document_id"] == "uscode:/us/usc/t16/s6592"

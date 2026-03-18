@@ -112,7 +112,7 @@ def laws_stats(_: dict[str, object] = Depends(current_user)) -> LawStatsResponse
     return law_stats()
 
 
-@router.get("/laws/{document_id}", response_model=LawDetail)
+@router.get("/laws/{document_id:path}", response_model=LawDetail)
 def law_detail(document_id: str, _: dict[str, object] = Depends(current_user)) -> LawDetail:
     item = get_law_detail(document_id)
     if not item:
