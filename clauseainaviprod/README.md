@@ -25,3 +25,5 @@ Fresh production-grade Electron desktop app scaffold for a Bills-first legislati
 - Bills UI scaffolded with mock data
 - Real bill ingestion and hybrid search still pending
 
+## Checkpointing
+- Use `python scripts/checkpoint_to_clausedev.py --commit "message" --push` to mirror this project into the GitHub-tracked `ClauseDev` repo.
