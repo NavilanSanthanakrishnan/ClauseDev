@@ -56,6 +56,13 @@ def heuristic_plan(query: str, filters: SearchFilters) -> dict[str, Any]:
     }
 
 
+def query_needs_gemini_planning(query: str) -> bool:
+    lowered = query.lower()
+    if any(token in lowered for token in ('"', "'", "\n", "section", "contradict", "conflict", "compare", "draft")):
+        return True
+    return len(normalize_tokens(query)) >= 10
+
+
 def gemini_plan(query: str, filters: SearchFilters) -> dict[str, Any] | None:
     payload = generate_json(
         f"""
@@ -98,15 +105,46 @@ def rerank_agentic(query: str, plan: dict[str, Any], filters: SearchFilters) -> 
     expanded_terms = set(expand_terms(query, effective_filters))
     jurisdiction_terms = set(normalize_tokens(effective_filters.jurisdiction or ""))
     required_terms = {term for term in normalize_tokens(query) if term not in jurisdiction_terms}
+    loop_trace: list[dict[str, Any]] = []
 
     def collect(search_filters: SearchFilters) -> None:
-        for rewrite in rewrites[:5]:
-            standard_response = search_bills(rewrite, search_filters)
+        queued = list(rewrites[:5])
+        seen: set[str] = set()
+        for step_index in range(3):
+            if not queued:
+                break
+            rewrite = queued.pop(0)
+            if rewrite in seen:
+                continue
+            seen.add(rewrite)
+            standard_response = search_bills(rewrite, search_filters.model_copy(update={"limit": max(filters.limit, 8)}))
+            loop_trace.append(
+                {
+                    "step": step_index + 1,
+                    "rewrite": rewrite,
+                    "result_count": len(standard_response.items),
+                    "jurisdiction": search_filters.jurisdiction,
+                }
+            )
             for item in standard_response.items:
                 candidate_items[item.bill_id] = item
-                candidate_scores[item.bill_id] += item.relevance_score * rewrite_weights[rewrite]
+                candidate_scores[item.bill_id] += item.relevance_score * rewrite_weights.get(rewrite, 1.0)
                 candidate_reasons[item.bill_id].append(f"Matched rewrite: {rewrite}")
                 candidate_reasons[item.bill_id].extend(item.matched_reasons)
+            if not required_terms:
+                continue
+            uncovered_terms = set(required_terms)
+            for item in standard_response.items[:3]:
+                item_tokens = set(normalize_tokens(" ".join([item.title, item.summary, item.identifier])))
+                uncovered_terms -= item_tokens
+            if uncovered_terms:
+                follow_up = " ".join(
+                    part
+                    for part in [effective_filters.jurisdiction or "", *sorted(uncovered_terms)]
+                    if part
+                )
+                if follow_up and follow_up not in seen and follow_up not in queued:
+                    queued.append(follow_up)
 
     def best_alignment_depth() -> int:
         best = 0
@@ -201,13 +239,18 @@ def rerank_agentic(query: str, plan: dict[str, Any], filters: SearchFilters) -> 
         mode="agentic",
         query=query,
         explanation=explanation,
-        plan={**plan, "effective_filters": effective_filters.model_dump(), "broadened_scope": broadened_scope},
+        plan={
+            **plan,
+            "effective_filters": effective_filters.model_dump(),
+            "broadened_scope": broadened_scope,
+            "loop_trace": loop_trace,
+        },
         items=response_items,
     )
 
 
 def agentic_search(query: str, filters: SearchFilters) -> SearchResponse:
-    plan = gemini_plan(query, filters) if gemini_available() else None
+    plan = gemini_plan(query, filters) if gemini_available() and query_needs_gemini_planning(query) else None
     if not plan:
         plan = heuristic_plan(query, filters)
     return rerank_agentic(query, plan, filters)

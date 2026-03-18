@@ -13,8 +13,11 @@ class GeminiUnavailableError(RuntimeError):
     pass
 
 
+_gemini_blocked_until = 0.0
+
+
 def gemini_available() -> bool:
-    return bool(settings.gemini_api_key)
+    return bool(settings.gemini_api_key) and time.time() >= _gemini_blocked_until
 
 
 def _endpoint(model: str, action: str) -> str:
@@ -22,8 +25,12 @@ def _endpoint(model: str, action: str) -> str:
 
 
 def _post_with_retry(model: str, action: str, payload: dict[str, Any]) -> httpx.Response:
+    global _gemini_blocked_until
+    if time.time() < _gemini_blocked_until:
+        raise GeminiUnavailableError("Gemini is temporarily disabled after quota exhaustion.")
+
     last_error: httpx.HTTPStatusError | None = None
-    for attempt in range(5):
+    for attempt in range(2):
         response = httpx.post(
             _endpoint(model, action),
             params={"key": settings.gemini_api_key},
@@ -35,10 +42,12 @@ def _post_with_retry(model: str, action: str, payload: dict[str, Any]) -> httpx.
             return response
         except httpx.HTTPStatusError as error:
             last_error = error
-            if response.status_code != 429 or attempt == 4:
+            if response.status_code == 429:
+                _gemini_blocked_until = time.time() + 300.0
+            if response.status_code != 429 or attempt == 1:
                 raise
             retry_after = response.headers.get("retry-after")
-            delay = float(retry_after) if retry_after else min(30.0, 2 ** attempt)
+            delay = float(retry_after) if retry_after else 1.0
             time.sleep(delay)
     if last_error:
         raise last_error
@@ -64,7 +73,7 @@ def generate_json(prompt: str) -> dict[str, Any] | None:
         payload = response.json()
         parts = payload["candidates"][0]["content"]["parts"]
         text = "".join(part.get("text", "") for part in parts)
-    except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError):
+    except (GeminiUnavailableError, httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError):
         return None
 
     if not text.strip():
@@ -90,7 +99,7 @@ def embed_text(text: str) -> list[float] | None:
             },
         )
         payload = response.json()
-    except (httpx.HTTPError, json.JSONDecodeError):
+    except (GeminiUnavailableError, httpx.HTTPError, json.JSONDecodeError):
         return None
     return payload.get("embedding", {}).get("values")
 
