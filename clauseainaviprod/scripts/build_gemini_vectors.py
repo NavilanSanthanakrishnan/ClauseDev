@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +19,10 @@ def main() -> None:
 
     ensure_database()
     candidates = bills.list_candidates(limit=5000)
+    existing_vectors = {bill_id for bill_id, _ in bills.list_bill_vectors()}
     for item in candidates:
+        if item["bill_id"] in existing_vectors:
+            continue
         text = "\n".join(
             [
                 item["identifier"],
@@ -32,8 +36,8 @@ def main() -> None:
         if vector:
             bills.upsert_bill_vector(item["bill_id"], vector)
             print(f"Embedded {item['identifier']}", flush=True)
+            time.sleep(0.7)
 
 
 if __name__ == "__main__":
     main()
-

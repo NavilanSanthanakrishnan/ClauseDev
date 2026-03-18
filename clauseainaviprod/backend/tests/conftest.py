@@ -88,6 +88,11 @@ TEST_RECORDS = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def disable_live_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "gemini_api_key", None)
+
+
 @pytest.fixture()
 def test_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     database_path = tmp_path / "clause.sqlite3"

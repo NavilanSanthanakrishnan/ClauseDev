@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Any
 
 from clause_backend.schemas import BillListItem, SearchFilters, SearchResponse
-from clause_backend.services.gemini import generate_json, gemini_available
+from clause_backend.services.gemini import generate_json, gemini_available, rerank_candidates
 from clause_backend.services.standard_search import expand_terms, infer_filters, normalize_tokens, search_bills
 
 
@@ -150,6 +150,30 @@ def rerank_agentic(query: str, plan: dict[str, Any], filters: SearchFilters) -> 
         elif intent == "find-similar" and item.outcome.lower() in {"passed", "enacted", "active"}:
             candidate_scores[bill_id] += 6.0
             candidate_reasons[bill_id].append("Similarity intent boosted enacted peer")
+
+    reranked = rerank_candidates(
+        query,
+        intent,
+        [
+            {
+                "id": item.bill_id,
+                "identifier": item.identifier,
+                "jurisdiction": item.jurisdiction,
+                "title": item.title,
+                "summary": item.summary,
+                "outcome": item.outcome,
+                "topics": item.topics,
+            }
+            for item in list(candidate_items.values())[:8]
+            if item.bill_id not in disqualified
+        ],
+    )
+    if reranked:
+        for bill_id, result in reranked.items():
+            if bill_id not in candidate_items:
+                continue
+            candidate_scores[bill_id] += float(result["score"]) * 3.5
+            candidate_reasons[bill_id].append(str(result["reason"]))
 
     ranked_items = sorted(
         [item for item in candidate_items.values() if item.bill_id not in disqualified],
