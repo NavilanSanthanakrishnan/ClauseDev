@@ -108,3 +108,76 @@ class LawStatsResponse(BaseModel):
 class LawFilterOptions(BaseModel):
     jurisdictions: list[str]
     sources: list[str]
+
+
+class AuthConfigResponse(BaseModel):
+    enabled: bool
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=3, max_length=255)
+
+
+class UserResponse(BaseModel):
+    user_id: str
+    email: str
+    display_name: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserResponse
+
+
+class ProjectListItem(BaseModel):
+    project_id: str
+    title: str
+    policy_goal: str
+    jurisdiction: str | None = None
+    status: str
+    stage: str
+    summary: str
+    updated_at: str
+    created_at: str
+
+
+class ProjectDetail(ProjectListItem):
+    bill_text: str
+    insights: dict[str, object] = Field(default_factory=dict)
+    messages: list[dict[str, object]] = Field(default_factory=list)
+
+
+class CreateProjectRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    policy_goal: str = Field(min_length=1, max_length=1000)
+    jurisdiction: str | None = Field(default=None, max_length=255)
+
+
+class UpdateProjectRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    policy_goal: str | None = Field(default=None, max_length=1000)
+    jurisdiction: str | None = Field(default=None, max_length=255)
+    status: str | None = Field(default=None, max_length=255)
+    stage: str | None = Field(default=None, max_length=255)
+    summary: str | None = Field(default=None, max_length=4000)
+    bill_text: str | None = None
+
+
+class RefreshInsightsResponse(BaseModel):
+    similar_bills: dict[str, object]
+    conflicting_laws: dict[str, object]
+    stakeholders: dict[str, object]
+    drafting_focus: dict[str, object]
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class ChatResponse(BaseModel):
+    message: dict[str, object]
+    tool_trace: list[dict[str, object]]
+    suggested_stage: str | None = None
+    suggested_status: str | None = None
+    revision_excerpt: str | None = None

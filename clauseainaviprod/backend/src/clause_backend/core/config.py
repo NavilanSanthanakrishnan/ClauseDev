@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     database_path: Path = Path(__file__).resolve().parents[4] / "database" / "clause.sqlite3"
     schema_path: Path = Path(__file__).resolve().parents[4] / "database" / "schema.sql"
     seed_path: Path = Path(__file__).resolve().parents[4] / "database" / "seed" / "bills.json"
+    auth_enabled: bool = False
+    auth_dummy_email: str = "demo@clause.local"
+    auth_dummy_password: str = "Passw0rd!Passw0rd!"
+    auth_session_hours: int = 24
     california_code_dsn: str = f"dbname=california_code host={PG_RUNTIME} port=55432"
     uscode_dsn: str = f"dbname=uscode_local host={PG_RUNTIME} port=55432"
     gemini_api_key: str | None = None
