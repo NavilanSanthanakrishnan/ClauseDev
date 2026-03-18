@@ -1,78 +1,93 @@
 # Architecture
 
 ## Goal
-Build `Clause` as a desktop-first Electron app with production-grade bill and law retrieval.
+Build `Clause` as a desktop-first legislative drafting system where retrieval and drafting happen in one workflow.
 
 ## Stack
-- Electron for desktop packaging on macOS and Windows
-- React + Vite + TypeScript for frontend
-- FastAPI + Python services for backend
-- SQLite for local bill search state and embeddings
+- Electron for macOS and Windows packaging
+- React + Vite + TypeScript frontend
+- FastAPI backend
+- SQLite for local bills, search indexes, app state, projects, and sessions
 - PostgreSQL corpora for California Code and U.S. Code
-- full text + embeddings + agentic reranking for retrieval
+- Gemini for planning, reranking, embeddings, and workspace assistance
 
-## Top-Level Boundaries
+## Product Topology
 ```text
 Electron Shell
-├── Frontend Renderer (React)
-│   ├── Shared app shell
-│   ├── Bills lookup workspace
-│   ├── Laws lookup workspace
-│   ├── Standard search mode
-│   └── Agentic search mode
-└── Backend API (FastAPI)
-    ├── Bill search endpoints
-    ├── Law search endpoints
-    ├── Detail endpoints
-    ├── Gemini planner and reranker
-    └── Data ingest jobs
+├── Auth gate
+├── Shared app shell
+│   ├── Bills home
+│   ├── Bill Lookup
+│   ├── Law Lookup
+│   └── Workspace
+└── Backend API
+    ├── Auth and session endpoints
+    ├── Bill retrieval endpoints
+    ├── Law retrieval endpoints
+    ├── Project workspace endpoints
+    └── Agent orchestration services
 ```
 
-## Initial Screen Model
+## Workspace Model
 ```text
-AppShell
-├── Sidebar
-│   └── Retrieval workspace
-└── Main Workspace
-    ├── Bills lookup
-    ├── Laws lookup
-    ├── Search mode switcher
-    ├── Filter rail
-    ├── Result list
-    └── Context-aware detail panel
+Workspace
+├── Bill brief
+├── Draft text editor
+├── Agent conversation
+└── Intelligence rail
+    ├── drafting focus
+    ├── similar bills
+    ├── conflicting laws
+    └── stakeholders
 ```
 
 ## Backend Layers
 ```text
 API
-├── routes
 ├── schemas
 ├── services
-├── repositories
-└── data jobs
+│   ├── standard_search
+│   ├── agentic_search
+│   ├── law_search
+│   ├── agentic_law_search
+│   ├── auth_service
+│   └── project_workspace
+└── repositories
+    ├── bills
+    ├── laws
+    └── app_state
 ```
 
-## Data Sources
+## Storage Boundaries
 ```text
-Local SQLite
+SQLite
 ├── bills
 ├── bill_fts
-└── bill_vectors
+├── bill_vectors
+├── users
+├── user_sessions
+├── projects
+├── project_insights
+└── project_messages
 
-External PostgreSQL corpora
+PostgreSQL corpora
 ├── california_code.public.official_law_sections
 └── uscode_local.public.usc_nodes
 ```
 
 ## Retrieval Strategy
-1. Structured filters narrow the corpus.
-2. Lexical ranking captures citations, identifiers, headings, and exact policy terms.
-3. Bill search can add Gemini embedding boosts when vectors exist.
-4. Agentic mode plans rewrites and reranks with Gemini.
-5. Detail panels always expose the exact underlying text.
+1. Run structured filters first.
+2. Use lexical retrieval for identifiers, citations, and exact policy terms.
+3. Add semantic boosts where embeddings exist.
+4. In agentic mode, let Gemini rewrite, broaden, and rerank the candidate pool.
+5. In the workspace, reuse those retrieval tools instead of inventing a separate reasoning path.
 
-## Initial Non-Goals
-- Auth
-- Editing workflow
-- Multi-tab navigation
-- Export pipeline
+## Product Rules
+- Auth should be enforced from the backend and reflected by the frontend.
+- The UI should keep navigation and meaning stable; the left rail is shared and persistent.
+- The workspace is the primary moat because it converts retrieved evidence into draft output.
+
+## Next Scale Direction
+- Add more state law corpora behind the same legal retrieval interface.
+- Move from local-only app state to a service-backed collaborative model when needed.
+- Add richer citations and traceable evidence bundles to every agent response.

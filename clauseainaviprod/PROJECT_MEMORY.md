@@ -1,47 +1,60 @@
-# ClauseAINaviProd
+# Clause Memory
 
-## Product
-- Desktop-first Electron application named `Clause`.
-- Initial scope is a single left-nav tab: `Bills`.
-- Primary screen is `Bill Lookup`.
-- No login/auth in v1.
+## Product Direction
+- `Clause` is a desktop-first legislative drafting system, not just a search UI.
+- The product has four core surfaces:
+  - `Bills`: workspace home for draft projects
+  - `Bill Lookup`: bill retrieval and comparison
+  - `Law Lookup`: statute retrieval and contradiction tracing
+  - `Workspace`: bill editing, supporting intelligence, and the on-site agent
+- The product should feel editorial, calm, and procedural. It should never feel game-like.
 
-## UX Direction
-- Replicate the provided dark editorial UI direction first.
-- Persistent left navigation should be a shared shell, not recreated per page.
-- Main Bills experience should support:
-  - standard bill search
-  - higher-precision guided or agentic search
-  - results list
-  - bill detail panel on the right
+## User Promise
+- Users should be able to move from research into drafting without changing tools.
+- Search results must show why they matched.
+- The workspace must keep:
+  - similar bills
+  - conflicting laws
+  - stakeholder pressure
+  - next drafting actions
+  - the agent conversation
+  in one place around the draft text.
 
-## Architecture Constraints
-- Start from scratch in this folder only.
-- Keep code separated into `frontend`, `backend`, `electron`, `assets`, and `database`.
-- Keep environment files outside this folder when possible.
-- Build for macOS and Windows packaging through Electron.
-- Reuse the frontend stack pattern from ClauseDev where appropriate.
-- Push progress through the nested `ClauseDev` git repo so GitHub updates stay visible there.
+## Auth
+- Auth is env-gated from the backend.
+- When auth is enabled, the UI must block the product behind the login screen.
+- Current local setup uses a dummy account so the auth template can later be replaced with real identity providers.
 
-## Data/Search Direction
-- Bill lookup must favor accuracy over novelty.
-- Plan for hybrid retrieval:
-  - structured filters
-  - lexical search
-  - semantic retrieval
-  - reranking
-- Agentic search should be a second mode, not the only mode.
+## Search Principles
+- Standard search is for exact, filter-driven retrieval.
+- Agentic search is for intent-driven discovery and should orchestrate hybrid retrieval, not replace it.
+- Bill and law retrieval should stay evidence-backed and auditable.
+- Fast local lexical retrieval plus semantic boosts and reranking are the baseline.
 
-## Build Sequence
-1. Lock architecture and data sources.
-2. Define schema and indexing strategy.
-3. Build backend search contracts.
-4. Build shell and Bills UI.
-5. Integrate retrieval modes.
-6. Add packaging, tests, and observability.
+## Orchestration Principles
+- The agent in the workspace is not a chatbot bolted onto the side.
+- It should operate over concrete tools:
+  - bill search
+  - law search
+  - stakeholder analysis
+  - drafting suggestions
+- The user should understand what the agent is doing and what evidence it used.
 
-## Non-Goals For First Pass
-- Auth
-- Multi-tab workspace
-- Draft editor
-- Full legislative workflow beyond bill lookup
+## YC / Survival Lens
+- The defensible product is not passive bill tracking.
+- The wedge is offensive legislative intelligence: helping small policy teams draft, compare, and revise bills faster with citations and strategic context.
+- The highest-value workflow is the bill workspace, because that is where research converts into output.
+
+## Current Gaps After This Checkpoint
+- More state law corpora beyond California and U.S. Code
+- Stronger evidence compression in the workspace rail
+- Export / collaboration workflow
+- Real auth provider integration
+- More explicit citations inside agent replies
+
+## Checkpoint Rule
+- After each meaningful checkpoint:
+  1. run backend tests
+  2. run frontend build
+  3. run the live smoke test
+  4. sync into the nested `ClauseDev` repo with `python3 scripts/checkpoint_to_clausedev.py --commit "..." --push`

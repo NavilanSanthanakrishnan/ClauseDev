@@ -1,36 +1,51 @@
 # Clause
 
-Production-oriented Electron desktop app for legislative bill and law retrieval.
+Production-oriented Electron software for legislative drafting, bill retrieval, and law retrieval.
 
-## Current scope
+## What it is now
 - Desktop shell for macOS and Windows
-- Shared dark editorial app shell
-- Bills lookup workspace
-- Laws lookup workspace
-- Standard retrieval mode
-- Gemini-backed agentic retrieval mode
+- React + Vite frontend
+- FastAPI backend
+- Local SQLite bill store
+- External PostgreSQL law corpora for California Code and U.S. Code
+- Gemini-backed agentic search and workspace assistance
+
+## Current product surfaces
+- `Bills`: drafting home with reusable bill workspaces
+- `Bill Lookup`: normal and agentic bill retrieval
+- `Law Lookup`: normal and agentic law retrieval
+- `Workspace`: bill editor, intelligence rail, and agent loop
+
+## Current capabilities
+- Env-gated login flow with a dummy local account
+- Hybrid bill search:
+  - exact matching
+  - inferred filters
+  - SQLite FTS
+  - optional Gemini embedding boosts
+  - agentic planning and reranking
+- Law search over California Code and U.S. Code
+- Workspace refresh that loads:
+  - similar bills
+  - conflicting laws
+  - stakeholders
+  - drafting focus
+- Workspace agent that works over the current draft context
 
 ## Structure
-- `frontend/` React + Vite renderer
-- `backend/` FastAPI API
+- `frontend/` renderer
+- `backend/` API and retrieval services
 - `electron/` desktop shell
-- `database/` local SQLite assets for bills and embeddings
-- `docs/` architecture, search, and environment notes
-- `scripts/` corpus import, vector build, and GitHub checkpoint tooling
+- `database/` local bill data and schema
+- `docs/` product, search, and environment notes
+- `scripts/` import, vectors, smoke testing, and GitHub checkpointing
 
-## What is live now
-- Bills database bootstrapped into local SQLite
-- Bill search with exact match, FTS, inferred filters, optional embeddings, and agentic rerank
-- Laws search over California Code and U.S. Code through external PostgreSQL corpora
-- Full bill detail and law detail panels
-- macOS packaging path verified with `electron-builder --dir`
-
-## Runtime configuration
-Environment stays outside the app folder in:
+## Environment
+Runtime config lives outside the project folder:
 
 `/Users/navilan/Documents/ClauseAIProd/.env.clauseainaviprod`
 
-See [docs/ENVIRONMENT.md](/Users/navilan/Documents/ClauseAIProd/clauseainaviprod/docs/ENVIRONMENT.md).
+See [ENVIRONMENT.md](/Users/navilan/Documents/ClauseAIProd/clauseainaviprod/docs/ENVIRONMENT.md).
 
 ## Core commands
 ```bash
@@ -41,17 +56,16 @@ npm run build:web
 npx electron-builder --dir
 ```
 
-## Data tooling
+## Quality gates
 ```bash
-uv run python scripts/import_openstates_subset.py --limit 5
-uv run python scripts/build_gemini_vectors.py
+cd backend && uv run pytest tests -q
+npm --prefix frontend run build
+python3 scripts/smoke_test.py
 ```
 
-## Checkpointing
-Use:
-
+## Checkpointing into GitHub
 ```bash
-python scripts/checkpoint_to_clausedev.py --commit "message" --push
+python3 scripts/checkpoint_to_clausedev.py --commit "message" --push
 ```
 
-That mirrors this app into the GitHub-tracked `ClauseDev` repo.
+That mirrors this app into the nested GitHub-tracked `ClauseDev` repo.

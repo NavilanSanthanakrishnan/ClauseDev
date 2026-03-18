@@ -14,6 +14,14 @@ CLAUSE_GEMINI_MODEL=gemini-2.5-flash
 CLAUSE_GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 ```
 
+## Auth template
+
+```bash
+CLAUSE_AUTH_ENABLED=true
+CLAUSE_AUTH_DUMMY_EMAIL=access@clause.local
+CLAUSE_AUTH_DUMMY_PASSWORD=ClauseDemo!2026
+```
+
 ## Optional external law databases
 
 ```bash
@@ -31,5 +39,7 @@ CLAUSE_DEBUG=true
 ## Notes
 
 - The local bills store lives in SQLite.
+- Local auth, projects, sessions, and workspace messages also live in SQLite.
 - California Code and U.S. Code are queried from external PostgreSQL corpora.
 - `scripts/build_gemini_vectors.py` incrementally fills missing bill embeddings.
+- `scripts/smoke_test.py` automatically logs in when auth is enabled.
