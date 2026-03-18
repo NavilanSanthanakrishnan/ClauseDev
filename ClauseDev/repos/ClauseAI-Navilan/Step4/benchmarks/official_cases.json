@@ -1,0 +1,80 @@
+[
+  {
+    "case_id": "ca-ab1099-20252026",
+    "session_identifier": "20252026",
+    "bill_identifier": "AB 1099",
+    "title": "Developmental services: initial intake: assessment.",
+    "status": "failed_or_stalled",
+    "official_source_url": "http://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202520260AB1099",
+    "expected_conflict_citations": [
+      "WIC 4642",
+      "WIC 4643"
+    ],
+    "forbidden_conflict_citations": [
+      "29 U.S.C. § 207",
+      "29 U.S.C. § 218"
+    ],
+    "notes": "Real California bill amending WIC intake and assessment timelines. Should at minimum surface the currently operative WIC sections it would displace."
+  },
+  {
+    "case_id": "ca-sb703-20232024",
+    "session_identifier": "20232024",
+    "bill_identifier": "SB 703",
+    "title": "Employment: work hours: flexible work schedules.",
+    "status": "failed",
+    "official_source_url": "http://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202320240SB703",
+    "expected_conflict_citations": [
+      "LAB 510"
+    ],
+    "forbidden_conflict_citations": [
+      "29 U.S.C. § 207"
+    ],
+    "notes": "Real California labor bill allowing individual 10-hour workdays within a 40-hour week without daily overtime. Should conflict with current LAB 510, but not with the federal 40-hour weekly overtime floor."
+  },
+  {
+    "case_id": "ca-ab3056-20232024",
+    "session_identifier": "20232024",
+    "bill_identifier": "AB 3056",
+    "title": "Agricultural workers: overtime compensation.",
+    "status": "failed",
+    "official_source_url": "http://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202320240AB3056",
+    "expected_conflict_citations": [
+      "LAB 860"
+    ],
+    "forbidden_conflict_citations": [
+      "29 U.S.C. § 207"
+    ],
+    "notes": "Real California labor bill raising the weekly overtime trigger for agricultural workers from 40 to 48 hours. Should conflict with current LAB 860."
+  },
+  {
+    "case_id": "ca-sb693-20252026",
+    "session_identifier": "20252026",
+    "bill_identifier": "SB 693",
+    "title": "Employees: meal periods.",
+    "status": "passed",
+    "official_source_url": "http://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202520260SB693",
+    "expected_conflict_citations": [
+      "LAB 512"
+    ],
+    "forbidden_conflict_citations": [
+      "29 U.S.C. § 207",
+      "29 U.S.C. § 218"
+    ],
+    "notes": "Real enacted California meal-period bill that changes an exception in LAB 512 for water-corporation employees."
+  },
+  {
+    "case_id": "ca-sb639-20212022",
+    "session_identifier": "20212022",
+    "bill_identifier": "SB 639",
+    "title": "Minimum wages: persons with disabilities.",
+    "status": "passed",
+    "official_source_url": "http://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202120220SB639",
+    "expected_conflict_citations": [
+      "LAB 1191"
+    ],
+    "forbidden_conflict_citations": [
+      "29 U.S.C. § 206"
+    ],
+    "notes": "Real enacted California bill phasing out special licenses that allowed subminimum wages. The current California code corpus still contains LAB 1191, but repealed LAB 1191.5 is no longer present as a live section, so the benchmark checks the retrievable current section only."
+  }
+]
