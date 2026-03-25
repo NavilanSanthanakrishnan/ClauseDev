@@ -12,3 +12,4 @@
 - Be explicit about which source tables feed each product table.
 - Prefer idempotent-ish setup where practical.
 - Keep bootstrap scripts honest about runtime; large materializations are expected.
+- `create_databases.sh` should provision placeholder databases for every default local DSN, but it must not imply the legal corpora are populated.

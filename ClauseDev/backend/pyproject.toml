@@ -1,7 +1,7 @@
 [project]
 name = "clauseai-backend"
 version = "0.1.0"
-description = "ClauseAIProd backend"
+description = "FastAPI backend for the ClauseAI legislative drafting workflow"
 authors = [{ name = "Shrey Vishen" }]
 requires-python = ">=3.14"
 dependencies = [

@@ -28,6 +28,7 @@
 - Similar-bills, legal, and stakeholder stages should persist guidance only. Do not let those stages produce preapproved bill text patches; Codex drafts the actual edits later in the editor loop.
 - Persist live editor state in the user database so the UI can poll and resume from durable session/event records.
 - Restrict Codex file edits in the final editor to the draft workspace files intended for that session.
+- Reference-database reads must fail fast in interactive routes. Prefer returning empty results to hanging on large corpus scans.
 
 ## Validation
 - Run `uv run pytest` for backend changes.

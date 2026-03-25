@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     codex_reasoning_effort: str = "low"
     codex_app_server_host: str = "127.0.0.1"
     codex_app_server_port: int = 8766
+    reference_query_timeout_ms: int = 3000
     max_draft_chars_for_model: int = 50000
     max_reference_items_for_model: int = 8
 

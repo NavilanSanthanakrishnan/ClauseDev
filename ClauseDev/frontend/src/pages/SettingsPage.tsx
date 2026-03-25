@@ -1,40 +1,28 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Check, Save, Settings, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { PageHeader } from '../components/PageHeader';
 import { SectionFrame } from '../components/SectionFrame';
 import { StatusBadge } from '../components/StatusBadge';
-import { api } from '../lib/api';
+import { api, type OpenAISettings } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 
-export function SettingsPage() {
-  useDocumentTitle('Settings');
-  const { accessToken } = useAuth();
-  const queryClient = useQueryClient();
+type SettingsFormProps = {
+  accessToken: string;
+  queryClient: QueryClient;
+  settings?: OpenAISettings;
+};
 
-  const [baseUrl, setBaseUrl] = useState('');
+function SettingsForm({ accessToken, queryClient, settings }: SettingsFormProps) {
+  const [baseUrl, setBaseUrl] = useState(settings?.base_url ?? '');
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('');
-
-  const settingsQuery = useQuery({
-    queryKey: ['openai-settings'],
-    queryFn: () => api.getOpenAISettings(accessToken!),
-    enabled: Boolean(accessToken),
-  });
-
-  useEffect(() => {
-    if (settingsQuery.data) {
-      setBaseUrl(settingsQuery.data.base_url);
-      setModel(settingsQuery.data.model);
-      setApiKey('');
-    }
-  }, [settingsQuery.data]);
+  const [model, setModel] = useState(settings?.model ?? '');
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      api.updateOpenAISettings(accessToken!, {
+      api.updateOpenAISettings(accessToken, {
         base_url: baseUrl || undefined,
         api_key: apiKey || undefined,
         model: model || undefined,
@@ -46,7 +34,7 @@ export function SettingsPage() {
   });
 
   const clearMutation = useMutation({
-    mutationFn: () => api.clearOpenAISettings(accessToken!),
+    mutationFn: () => api.clearOpenAISettings(accessToken),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['openai-settings'] });
       setBaseUrl('');
@@ -55,7 +43,7 @@ export function SettingsPage() {
     },
   });
 
-  const s = settingsQuery.data;
+  const s = settings;
 
   return (
     <div className="page-stack">
@@ -161,5 +149,29 @@ export function SettingsPage() {
         </div>
       </SectionFrame>
     </div>
+  );
+}
+
+export function SettingsPage() {
+  useDocumentTitle('Settings');
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  const settingsQuery = useQuery({
+    queryKey: ['openai-settings'],
+    queryFn: () => api.getOpenAISettings(accessToken!),
+    enabled: Boolean(accessToken),
+  });
+
+  const settings = settingsQuery.data;
+  const formKey = [settings?.base_url ?? '', settings?.model ?? '', settings?.api_key_set ? '1' : '0'].join('::');
+
+  return (
+    <SettingsForm
+      key={formKey}
+      accessToken={accessToken!}
+      queryClient={queryClient}
+      settings={settings}
+    />
   );
 }

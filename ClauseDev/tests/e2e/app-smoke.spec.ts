@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('homepage renders core ClauseAI shell', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Bring your bill. We bring you to Congress.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Book a Demo' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Book a Demo' })).toBeVisible();
 });
 
 test('signup to project creation flow works', async ({ page }) => {
@@ -15,8 +15,8 @@ test('signup to project creation flow works', async ({ page }) => {
   await page.getByLabel('Password').fill('strong-password-123');
   await page.getByRole('button', { name: 'Create Account' }).click();
 
-  await expect(page.getByText('Resume drafts or start a new legislative workspace.')).toBeVisible();
-  await page.getByRole('button', { name: 'Create Project' }).click();
+  await expect(page.getByRole('heading', { name: 'Create a bill workspace or jump back into one.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Create workspace' }).click();
 
-  await expect(page.getByText('Source document')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Upload your bill' })).toBeVisible();
 });

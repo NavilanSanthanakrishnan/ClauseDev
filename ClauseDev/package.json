@@ -2,7 +2,7 @@
   "name": "clauseaiprod",
   "private": true,
   "version": "0.1.0",
-  "description": "ClauseAIProd desktop and web application",
+  "description": "ClauseAI legislative drafting workstation with web and Electron runtimes",
   "author": "Shrey Vishen",
   "main": "electron/main/index.cjs",
   "scripts": {

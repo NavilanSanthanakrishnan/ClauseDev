@@ -41,8 +41,10 @@
 - Keep the final editor traceable: every AI draft mutation must remain reviewable, attributable, and versioned.
 - Do not treat `repos/`, `plan/`, or `screenshots/` as runtime code unless the task explicitly asks for that.
 - Preserve the two-database separation.
+- Keep the repository-level README and security docs aligned with the supported runtime path. Public-facing docs must clearly distinguish `ClauseDev/` from the archival folders.
 - When the reference database is still building, the UI should show honest status rather than pretending search is complete.
 - Preserve the new `/settings` UX and `/api/settings/openai` REST flow. Stored endpoint settings live in `backend/data/openai_settings.json`.
+- Treat `backend/data/` as local runtime state. Do not commit `openai_settings.json`, editor storage, or any other generated secret-bearing file.
 - Keep markdown/report rendering structured. The app now uses a dedicated markdown renderer instead of raw pre-wrapped text for report content.
 - Keep diff output rendered with the dedicated diff viewer and color-coded unified diff presentation rather than plain `<div>` text.
 - UI density has been tightened globally; prefer extending the current spacing scale instead of reintroducing oversized card padding/gaps.

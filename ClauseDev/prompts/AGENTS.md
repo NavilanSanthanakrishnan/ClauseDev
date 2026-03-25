@@ -10,3 +10,4 @@
 ## Editing
 - Keep prompt intent clear and specific.
 - If product behavior diverges from these docs, update the docs or the implementation intentionally rather than letting them drift silently.
+- Runtime prompt files loaded by `backend/src/clauseai_backend/services/prompt_loader.py` also live here and must stay aligned with the filenames used in code.

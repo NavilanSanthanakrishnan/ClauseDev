@@ -5,11 +5,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from clauseai_backend.core.config import settings
 from clauseai_backend.db.session import ReferenceDatabases
 
 
 def _safe_query(db: Session, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     try:
+        if settings.reference_query_timeout_ms > 0:
+            db.execute(text(f"set local statement_timeout = {int(settings.reference_query_timeout_ms)}"))
         rows = db.execute(text(sql), params).mappings().all()
     except SQLAlchemyError:
         return []
